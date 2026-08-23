@@ -122,8 +122,11 @@ html, body {
 .ba-bar-reason { font-size: 12px; color: var(--dim); margin-top: 4px; }
 
 .ba-copy-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel2); }
-.ba-copy-head { font-weight: 700; margin-bottom: 4px; }
+.ba-copy-head { font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ba-copy-body { color: var(--dim); font-size: 12px; }
+.ba-framework-badge { font-family: 'IBM Plex Mono', monospace; font-size: 10px; background: rgba(124,108,255,0.15); color: var(--violet); padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.ba-framework-breakdown { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--dim); line-height: 1.8; }
+.ba-framework-breakdown b { color: var(--amber); }
 
 .ba-funnel-row { margin-bottom: 12px; }
 .ba-funnel-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }

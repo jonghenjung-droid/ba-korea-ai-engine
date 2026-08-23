@@ -1,12 +1,27 @@
-# BA KOREA AI Marketing Agent — 7 Engine Pipeline + 실시간 시장 데이터 루프
+# BA KOREA AI Marketing Agent — 7 Engine Pipeline + 라이프스타일 연동 + ROAS + 실시간 시장 데이터 루프
 
 Next.js + Supabase + Vercel 기반 실제 배포용 프로젝트입니다.
 Brand → Customer → Media → Strategy(MMM) → Creative → Analytics → CLV, 7개 엔진이 순차 실행됩니다.
 
 - **Brand / Customer / Creative / Strategy(서술)**: 서버 API Route(`/api/engine`)가 Claude API를 호출합니다. API 키는 서버에만 존재하며 브라우저에 노출되지 않습니다.
-- **Media / Strategy(MMM 최적화) / Analytics / CLV**: `src/lib/engines.ts`에 결정론적 로직으로 구현되어 있습니다 (Adstock·Saturation 기반 예산 최적화, 글로벌 컨설팅사 CLV 공식 등).
+- **Media / Strategy(MMM 최적화) / ROAS / Analytics / CLV**: `src/lib/engines.ts`에 결정론적 로직으로 구현되어 있습니다.
 - **캠페인 히스토리**: Supabase `campaigns` 테이블에 저장/조회/삭제됩니다.
-- **실시간 시장 데이터 루프 (신규)**: 수집 → 정제 → 저장 → RAG 분석 → 피드백, 5단계 루프가 구현되어 있습니다 (아래 참고).
+- **실시간 시장 데이터 루프**: 수집 → 정제 → 저장 → RAG 분석 → 피드백, 5단계 루프.
+- **MMM 자동 재학습**: 실제 성과 피드백이 채널별 학습 보정값(`channel_calibration`)을 갱신해, 다음 캠페인부터 예산 배분에 반영됩니다.
+
+## 최근 업데이트 — Media/Strategy 라이프스타일 연동 + ROAS + 재학습
+
+| 항목 | 이전 | 지금 |
+|---|---|---|
+| Customer Engine | 이름·연령대·페인포인트만 생성 | `audience_share`(타깃 비중), `lifestyle`(활동 시간대·채널별 목적/가중치·콘텐츠 선호·여정 터치포인트)까지 구조화된 JSON으로 생성 |
+| Media Engine | 브랜드 설명 기반 고정 휴리스틱(코사인 유사도) | 페르소나별 `lifestyle.primary_platforms.weight`를 `audience_share`로 가중 평균 — 타깃이 다르면 채널 점수가 실제로 갈림 |
+| Strategy Engine | Vmax = 원천효과×친화도 (내부적으로만 결합) | `rawEffect`(채널 고유 Adstock 효과)·`affinity`(페르소나 친화도)·`calibration`(학습 보정)을 결과에 모두 노출 — 왜 이 배분인지 투명하게 설명 가능 |
+| Creative Engine | 암묵적 "좋은 카피" 생성 | 마케팅 목표(인지도/전환/재구매)별 카피라이팅 프레임워크(AIDA·PAS·StoryBrand·Cialdini) 지정 + `framework_breakdown`으로 단계별 근거 노출 |
+| ROAS | 없음 | Strategy 배분 + 업계 벤치마크(CPM/CTR/CVR) + AOV로 채널별 추정 ROAS, 즉시/LTV 기준 Blended ROAS 산출 |
+| Analytics Engine | 총예산에 블렌디드 상수(CPM/CTR/CVR) 적용 — ROAS 계산과 별도로 어긋날 위험 | ROAS의 채널별 계산 결과를 그대로 합산 — 두 계산이 하나의 소스로 통합됨 |
+| 피드백 루프 | 데이터 소스 신뢰도만 갱신 | 소스 신뢰도 + **채널별 MMM 보정값까지 자동 재학습** — 실제 성과가 좋았던 채널은 다음 실행부터 더 많은 예산을 받도록 Vmax가 조정됨 |
+
+**중요한 한계**: 위 표의 "지금" 항목들은 모두 하나의 캠페인 실행 안에서 결정론적으로 계산되며, 실제 광고 플랫폼 데이터나 실제 MMM 통계 모델(R Robyn/Python LightweightMMM 자체)이 연동된 것은 아닙니다. `CHANNEL_BENCHMARKS`(업계 평균 CPM/CTR/CVR)는 하드코딩된 시작값이며, 실측 데이터가 쌓이면 교체를 권장합니다. 이번 업데이트에서 리포트 PDF 추출 기능(Puppeteer 서버 렌더링)은 반영하지 않았습니다 — 별도로 진행 가능합니다.
 
 ## 실시간 시장 데이터 루프 구조
 
@@ -16,7 +31,7 @@ Brand → Customer → Media → Strategy(MMM) → Creative → Analytics → CL
 | 2. 정제 | `src/lib/marketData.ts` | 수치 정규화, 소스별 신뢰도 가중치(`source_effectiveness`) 부여 |
 | 3. 저장 | Supabase `market_signals`(시계열) / `market_documents`(pgvector 임베딩) | TimescaleDB/Pinecone 대신 Postgres + pgvector로 경량 구현 |
 | 4. 분석(RAG) | `/api/market/query` | Strategy Engine이 Claude를 호출하기 전에 벡터 유사도 검색 + 최근 시그널을 컨텍스트로 주입 |
-| 5. 피드백 | `/api/feedback` | 실제 캠페인 성과(CTR/CVR/ROAS)를 입력하면, 그 캠페인이 참고했던 데이터 소스의 신뢰도 점수를 자동 갱신 |
+| 5. 피드백 | `/api/feedback` | 실제 캠페인 성과(CTR/CVR/ROAS)를 입력하면, 그 캠페인이 참고했던 데이터 소스의 신뢰도 **및 채널별 MMM 보정값**을 자동 갱신 |
 
 **중요한 한계**: 이 루프는 `SERPAPI_KEY`(수집)와 `VOYAGE_API_KEY`(임베딩)가 설정되어야 실제로 동작합니다. 둘 다 없어도 나머지 7개 엔진과 앱 전체는 정상 작동하며, 이 두 기능만 자동으로 비활성화됩니다 — 즉 선택적(optional) 확장입니다.
 
@@ -114,9 +129,10 @@ src/
         keywords/route.ts   # 추적 키워드 관리 (1단계 대상 설정)
         ingest/route.ts     # 실시간 수집 (1~3단계: SerpAPI → 정제 → 저장)
         query/route.ts      # RAG 검색 (4단계: pgvector 유사도 + 최근 시그널)
-      feedback/route.ts     # 성과 피드백 → 소스 신뢰도 자동 갱신 (5단계)
+      feedback/route.ts     # 성과 피드백 → 소스 신뢰도 + 채널 학습 보정값 자동 갱신 (5단계)
+      market/calibration/route.ts # 채널별 MMM 학습 보정값 조회
   lib/
-    engines.ts              # Media/Strategy(MMM)/Analytics/CLV 계산 로직
+    engines.ts              # Media(페르소나 친화도)/Strategy(MMM)/ROAS/Analytics/CLV 계산 로직
     marketData.ts           # 임베딩(Voyage) · SerpAPI 수집 헬퍼
     supabaseAdmin.ts        # Supabase 서버 클라이언트 (service role)
 supabase/

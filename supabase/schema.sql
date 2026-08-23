@@ -83,6 +83,14 @@ create table if not exists source_effectiveness (
   sample_size integer not null default 0
 );
 
+-- 5단계: 채널별 MMM 학습 보정값 (실제 성과 피드백으로 Vmax를 자동 재학습)
+create table if not exists channel_calibration (
+  channel text primary key,
+  multiplier numeric not null default 1.0,
+  sample_size integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
 -- Row Level Security 활성화.
 -- 이 앱은 브라우저가 Supabase에 직접 접근하지 않고, 반드시 Next.js API Route(서버)를 거칩니다.
 -- API Route는 SUPABASE_SERVICE_ROLE_KEY를 사용하며, 이 키는 RLS를 우회합니다.
@@ -94,4 +102,5 @@ alter table market_signals enable row level security;
 alter table market_documents enable row level security;
 alter table campaign_feedback enable row level security;
 alter table source_effectiveness enable row level security;
+alter table channel_calibration enable row level security;
 

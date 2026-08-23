@@ -10,6 +10,10 @@ function normalizePerformance(actual_roas?: number, actual_cvr?: number): number
   return 0.5;
 }
 
+function clamp(x: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, x));
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
@@ -46,11 +50,11 @@ export async function POST(req: NextRequest) {
       .single();
     if (insErr) throw insErr;
 
-    // 이 캠페인이 참고했던 시장 데이터 소스를 찾아 효과성 점수를 갱신 (피드백 루프)
     const { data: campaign } = await supabase.from("campaigns").select("results").eq("id", campaign_id).maybeSingle();
-    const ragSources: string[] = campaign?.results?.strategy?.ragSources || [];
     const perf = normalizePerformance(actual_roas, actual_cvr);
 
+    // 1) 이 캠페인이 참고했던 시장 데이터 소스의 신뢰도 점수 갱신
+    const ragSources: string[] = campaign?.results?.strategy?.ragSources || [];
     for (const source of ragSources) {
       const { data: existing } = await supabase.from("source_effectiveness").select("*").eq("source", source).maybeSingle();
       const prevScore = existing ? Number(existing.score) : 0.5;
@@ -64,7 +68,32 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ feedback: feedbackRow, updatedSources: ragSources });
+    // 2) MMM 모델 자동 재학습: 이 채널에 대해 모델이 "예측한 실현 효과지수"와
+    //    실제 성과를 비교해 channel_calibration(보정 배수)을 갱신한다.
+    //    다음 캠페인부터 이 배수가 Strategy Engine의 Vmax에 곱해져 배분에 반영된다.
+    let updatedCalibration: { channel: string; multiplier: number } | null = null;
+    if (channel) {
+      const strategyChannels = campaign?.results?.strategy?.channels || [];
+      const predicted = strategyChannels.find((c: any) => c.name === channel);
+      const predictedNorm = predicted && predicted.response > 1 ? predicted.response / 100 : null;
+
+      if (predictedNorm) {
+        const ratio = clamp(perf / predictedNorm, 0.2, 5);
+        const { data: existingCal } = await supabase.from("channel_calibration").select("*").eq("channel", channel).maybeSingle();
+        const prevMultiplier = existingCal ? Number(existingCal.multiplier) : 1.0;
+        const prevSamples = existingCal ? Number(existingCal.sample_size) : 0;
+        const newMultiplier = clamp(prevMultiplier * 0.7 + ratio * 0.3, 0.3, 3.0);
+        await supabase.from("channel_calibration").upsert({
+          channel,
+          multiplier: newMultiplier,
+          sample_size: prevSamples + 1,
+          updated_at: new Date().toISOString(),
+        });
+        updatedCalibration = { channel, multiplier: newMultiplier };
+      }
+    }
+
+    return NextResponse.json({ feedback: feedbackRow, updatedSources: ragSources, updatedCalibration });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "저장 실패" }, { status: 500 });
   }

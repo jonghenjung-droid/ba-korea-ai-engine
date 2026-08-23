@@ -7,11 +7,13 @@ import {
   Rss, Plus, X, Gauge,
 } from "lucide-react";
 import {
-  Brand, Persona, MediaScore, Strategy, Analytics, CLVResult,
-  extractJSON, runMediaEngine, computeMMMAllocation, runAnalyticsEngine, runCLVEngine,
+  Brand, Persona, MediaScore, Strategy, Analytics, CLVResult, ROASResult, BlendedROAS, ChannelCalibration,
+  extractJSON, runMediaEngine, computeMMMAllocation, computeChannelROAS, computeBlendedROAS, runAnalyticsEngine, runCLVEngine,
+  FRAMEWORK_BY_GOAL,
 } from "@/lib/engines";
 
-type Creative = { copies: { headline: string; body: string }[]; short_form_concept: string };
+type CreativeCopy = { headline: string; body: string; framework?: string; framework_breakdown?: { step: string; text: string }[] };
+type Creative = { copies: CreativeCopy[]; short_form_concept: string };
 
 type Results = {
   brand: Brand | null;
@@ -21,6 +23,7 @@ type Results = {
   media: MediaScore[] | null;
   analytics: Analytics | null;
   clv: CLVResult | null;
+  roas: { channels: ROASResult[]; blended: BlendedROAS } | null;
 };
 
 type CampaignRecord = {
@@ -35,11 +38,11 @@ type CampaignRecord = {
 
 const ENGINES = [
   { key: "brand", label: "Brand Engine", sub: "브랜드 DNA 추출", icon: Layers },
-  { key: "customer", label: "Customer Engine", sub: "타깃 페르소나 생성", icon: Users },
-  { key: "media", label: "Media Engine", sub: "매체 매칭 스코어링", icon: Radar },
-  { key: "strategy", label: "Strategy Engine", sub: "MMM 예산 최적화 (Adstock·Saturation)", icon: Target },
-  { key: "creative", label: "Creative Engine", sub: "카피 & 크리에이티브", icon: Sparkles },
-  { key: "analytics", label: "Analytics Engine", sub: "퍼널 예측 & 트리거", icon: LineChart },
+  { key: "customer", label: "Customer Engine", sub: "라이프스타일 페르소나 생성", icon: Users },
+  { key: "media", label: "Media Engine", sub: "페르소나×채널 친화도 매칭", icon: Radar },
+  { key: "strategy", label: "Strategy Engine", sub: "MMM 예산 최적화 (Adstock·Saturation·친화도)", icon: Target },
+  { key: "creative", label: "Creative Engine", sub: "카피라이팅 프레임워크 기반 크리에이티브", icon: Sparkles },
+  { key: "analytics", label: "Analytics Engine", sub: "채널별 ROAS 합산 퍼널 & 트리거", icon: LineChart },
   { key: "clv", label: "CLV Engine", sub: "고객생애가치(CLV) 통합 산출", icon: Repeat },
 ] as const;
 
@@ -54,7 +57,7 @@ const EXAMPLE = {
   desc: "가평 소재 프리미엄 글램핑 브랜드. 지하수 70M 인피니티풀과 프라이빗 텐트동을 갖춘 감성 숙박 공간으로, 커플·가족 단위 고객에게 자연 속 힐링 경험을 제공. 네이버플레이스와 인스타그램을 중심으로 시즌별 캠페인을 운영 중이며, 재방문율이 높은 것이 특징.",
 };
 
-const EMPTY_RESULTS: Results = { brand: null, personas: null, strategy: null, creative: null, media: null, analytics: null, clv: null };
+const EMPTY_RESULTS: Results = { brand: null, personas: null, strategy: null, creative: null, media: null, analytics: null, clv: null, roas: null };
 
 async function callClaude(system: string, prompt: string) {
   const res = await fetch("/api/engine", {
@@ -94,6 +97,7 @@ export default function Home() {
   const [ingestStatus, setIngestStatus] = useState<string | null>(null);
   const [ingesting, setIngesting] = useState(false);
   const [sourceScores, setSourceScores] = useState<{ source: string; score: number; sample_size: number }[]>([]);
+  const [channelCalibration, setChannelCalibration] = useState<{ channel: string; multiplier: number; sample_size: number }[]>([]);
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
   const [feedbackForm, setFeedbackForm] = useState({ channel: "", actual_ctr: "", actual_cvr: "", actual_roas: "", notes: "" });
   const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
@@ -115,6 +119,13 @@ export default function Home() {
         if (res.ok) setSourceScores(data.sourceScores || []);
       } catch (e) {
         // 소스 점수도 부가 기능이므로 조용히 무시
+      }
+      try {
+        const res = await fetch("/api/market/calibration");
+        const data = await res.json();
+        if (res.ok) setChannelCalibration(data.calibration || []);
+      } catch (e) {
+        // 보정값도 부가 기능이므로 조용히 무시
       }
     })();
   }, []);
@@ -186,11 +197,14 @@ export default function Home() {
         setFeedbackStatus(data.error || "저장 실패");
         return;
       }
-      setFeedbackStatus("피드백이 저장되었고, 참고했던 데이터 소스의 신뢰도 점수가 갱신되었습니다.");
+      setFeedbackStatus("피드백이 저장되었고, 참고했던 데이터 소스·채널 학습 보정값이 갱신되었습니다.");
       setFeedbackForm({ channel: "", actual_ctr: "", actual_cvr: "", actual_roas: "", notes: "" });
       const scoresRes = await fetch("/api/feedback");
       const scoresData = await scoresRes.json();
       if (scoresRes.ok) setSourceScores(scoresData.sourceScores || []);
+      const calRes = await fetch("/api/market/calibration");
+      const calData = await calRes.json();
+      if (calRes.ok) setChannelCalibration(calData.calibration || []);
     } catch (e) {
       setFeedbackStatus("피드백 저장 중 오류가 발생했습니다.");
     }
@@ -284,18 +298,19 @@ export default function Home() {
 
       setStage(1);
       const customer = await callClaude(
-        "너는 AI Customer Engine이다. Brand DNA를 바탕으로 핵심 타깃 페르소나 3개를 JSON으로만 생성한다.",
-        `Brand DNA: ${JSON.stringify(brand)}\n\n다음 형식의 JSON으로만 답하라:\n{"personas":[{"name":"페르소나 이름(예: 3040 워킹맘 지현)","age_group":"연령대","pain_point":"핵심 페인포인트 한 문장","decision_factor":"구매 결정 요인 한 문장"}] } 총 3개 항목`
+        "너는 AI Customer Engine이다. Brand DNA를 바탕으로 핵심 타깃 페르소나 3개를 JSON으로만 생성한다. 각 페르소나는 실제 미디어 소비 습관(라이프스타일)을 구체적으로 반영해야 하며, 채널마다 동일한 weight를 주는 것은 금지한다.",
+        `Brand DNA: ${JSON.stringify(brand)}\n\n다음 형식의 JSON으로만 답하라 (channel 값은 반드시 아래 5개 중에서만 사용: "메타 (Meta)", "네이버 검색광고", "카카오모먼트", "유튜브", "틱톡 / 숏폼"):\n{"personas":[{"name":"페르소나 이름(예: 3040 워킹맘 지현)","age_group":"연령대","pain_point":"핵심 페인포인트 한 문장","decision_factor":"구매 결정 요인 한 문장","audience_share":0.4,"lifestyle":{"active_hours":["morning_commute"|"lunch"|"after_work"|"weekend"|"late_night"],"primary_platforms":[{"channel":"채널명","purpose":"discovery"|"verification"|"immersion"|"conversion","weight":0.0}],"content_format_pref":["short_form"|"long_form"|"text"|"live"],"journey_touchpoints":[{"stage":"awareness"|"consideration"|"decision","channel":"채널명"}]}}] } 총 3개 항목, audience_share 합계는 1.0`
       );
       const personas: Persona[] = customer.personas || [];
       setResults((r) => ({ ...r, personas }));
 
       setStage(2);
-      const media = runMediaEngine(brand, personas, goal, budget);
+      const media = runMediaEngine(personas);
       setResults((r) => ({ ...r, media }));
 
       setStage(3);
-      const optimized = computeMMMAllocation(media, budget);
+      const calibrationMap: ChannelCalibration = Object.fromEntries(channelCalibration.map((c) => [c.channel, c.multiplier]));
+      const optimized = computeMMMAllocation(media, budget, calibrationMap);
 
       // 4단계: RAG - 실시간 수집 데이터(시그널/문서)에서 관련 컨텍스트 조회
       let ragContext = "";
@@ -323,7 +338,7 @@ export default function Home() {
       }
 
       const narrative = await callClaude(
-        "너는 AI Strategy Engine이다. MMM(Adstock·Saturation) 최적화 엔진이 이미 산출한 채널별 예산 배분 결과에 대해, 브랜드/타깃 관점의 배정 이유를 채널마다 한 문장씩 설명하고 전체 전략을 한 줄로 요약한다. 실시간 시장 데이터가 주어지면 그 추세도 반영해서 설명한다. 배분 비율(percent) 자체는 절대 바꾸지 말고 이유만 작성한다. JSON으로만 답하라.",
+        "너는 AI Strategy Engine이다. MMM(Adstock·Saturation·페르소나 친화도) 최적화 엔진이 이미 산출한 채널별 예산 배분 결과에 대해, 브랜드/타깃 관점의 배정 이유를 채널마다 한 문장씩 설명하고 전체 전략을 한 줄로 요약한다. 실시간 시장 데이터가 주어지면 그 추세도 반영해서 설명한다. 배분 비율(percent) 자체는 절대 바꾸지 말고 이유만 작성한다. JSON으로만 답하라.",
         `Brand DNA: ${JSON.stringify(brand)}\nPersonas: ${JSON.stringify(personas)}\n마케팅 목표: ${goal}\nMMM 최적화 배분 결과: ${JSON.stringify(optimized.map((o) => ({ name: o.name, percent: o.percent })))}${ragContext}\n\n다음 형식의 JSON으로만 답하라:\n{"channel_reasons":[{"name":"채널명","reason":"배정 이유 한 문장"}], "summary":"전체 전략 한 줄 요약"}`
       );
       const reasonMap: Record<string, string> = Object.fromEntries(
@@ -336,25 +351,33 @@ export default function Home() {
       };
       setResults((r) => ({ ...r, strategy }));
 
+      // Strategy Engine 배분 결과 + 업계 벤치마크 + AOV로 채널별 추정 ROAS (섹션 6)
+      const channelROAS = computeChannelROAS(strategy.channels, aov);
+
       setStage(4);
+      const frameworks = FRAMEWORK_BY_GOAL[goal] || FRAMEWORK_BY_GOAL["인지도"];
       const creative: Creative = await callClaude(
-        "너는 AI Creative Engine이다. 브랜드 DNA와 전략을 바탕으로 광고 카피와 숏폼 컨셉을 JSON으로만 생성한다.",
-        `Brand DNA: ${JSON.stringify(brand)}\n전략 요약: ${strategy.summary || ""}\n\n다음 형식의 JSON으로만 답하라:\n{"copies":[{"headline":"헤드라인","body":"서브카피 한 문장"}], "short_form_concept":"15초 숏폼 영상 컨셉 한 단락"} copies는 총 3개`
+        "너는 AI Creative Engine이다. 브랜드 DNA와 전략을 바탕으로 광고 카피와 숏폼 컨셉을 JSON으로만 생성한다. 지정된 카피라이팅 프레임워크의 단계를 실제로 따라 자연스럽게 작성하고, 억지로 끼워맞추지 않는다.",
+        `Brand DNA: ${JSON.stringify(brand)}\n전략 요약: ${strategy.summary || ""}\n사용 가능한 카피라이팅 프레임워크: ${JSON.stringify(frameworks)}\n\n다음 형식의 JSON으로만 답하라 (copies 3개, 프레임워크는 위 후보 중에서 선택하되 다양하게 섞어도 됨):\n{"copies":[{"headline":"헤드라인","body":"서브카피 한 문장","framework":"사용한 프레임워크명","framework_breakdown":[{"step":"단계명","text":"카피 중 이 단계에 해당하는 부분"}]}], "short_form_concept":"15초 숏폼 영상 컨셉 한 단락"}`
       );
       setResults((r) => ({ ...r, creative }));
 
       setStage(5);
-      const analytics = runAnalyticsEngine(media, goal, budget);
+      const analytics = runAnalyticsEngine(channelROAS, goal);
       setResults((r) => ({ ...r, analytics }));
 
       setStage(6);
       const clv = runCLVEngine(budget, analytics, { aov, freq, marginPct, churnPct, retentionCost, discountPct, years });
       setResults((r) => ({ ...r, clv }));
 
+      const blended = computeBlendedROAS(channelROAS, budget, clv.ltv);
+      const roas = { channels: channelROAS, blended };
+      setResults((r) => ({ ...r, roas }));
+
       setStage(7);
       await saveCampaignToHistory({
         name, description: desc, goal, budget,
-        results: { brand, personas, strategy, creative, media, analytics, clv },
+        results: { brand, personas, strategy, creative, media, analytics, clv, roas },
       });
     } catch (e: any) {
       setError("AI 엔진 실행 중 오류가 발생했습니다: " + e.message);
@@ -369,9 +392,11 @@ export default function Home() {
         <h1 className="ba-title">AI Marketing Agent<br />— 7 Engine Pipeline</h1>
         <p className="ba-sub">
           브랜드 정보를 입력하면 Brand → Customer → Media → Strategy → Creative → Analytics → CLV 순으로 에이전트가 순차 실행됩니다.
-          Brand·Customer·Creative 엔진은 서버 API Route를 통해 Claude를 호출하며, Media 엔진은 자체 매칭 알고리즘, Strategy 엔진은
-          Meta Robyn·Google LightweightMMM 방법론(Adstock 이월효과·Saturation 포화곡선) 기반 예산 최적화, CLV 엔진은 글로벌 컨설팅사
-          (Bain·McKinsey·Gartner·BCG) 통합 공식으로 계산됩니다. 실행 결과는 Supabase에 저장되어 언제든 다시 불러볼 수 있습니다.
+          Customer Engine이 만든 페르소나의 라이프스타일(채널 습관·비중)이 Media Engine의 채널 친화도 매칭에 그대로 연결되고, Strategy 엔진은
+          Meta Robyn·Google LightweightMMM 방법론(Adstock 이월효과·Saturation 포화곡선) × 그 친화도 × 실제 성과로 학습된 보정값을 곱해 예산을 최적화합니다.
+          Creative Engine은 마케팅 목표에 맞는 카피라이팅 프레임워크(AIDA·PAS·StoryBrand·Cialdini)를 선택해 카피를 생성하고, Analytics Engine은
+          Strategy의 채널별 배분·ROAS 계산과 동일한 숫자를 그대로 합산해 퍼널을 산출합니다. CLV 엔진은 글로벌 컨설팅사(Bain·McKinsey·Gartner·BCG)
+          통합 공식으로 계산되며, 실행 결과는 Supabase에 저장되어 언제든 다시 불러볼 수 있습니다.
         </p>
 
         <div className="ba-grid">
@@ -573,6 +598,18 @@ export default function Home() {
                   ))}
                 </>
               )}
+
+              {channelCalibration.length > 0 && (
+                <>
+                  <label className="ba-label" style={{ marginTop: 14 }}>채널 학습 보정값 (실제 성과 기반 자동 재학습)</label>
+                  {channelCalibration.map((c) => (
+                    <div className="ba-bar-row" key={c.channel}>
+                      <div className="ba-bar-top"><span className="ba-mono">{c.channel}</span><span className="ba-mono">{Number(c.multiplier).toFixed(2)}x (n={c.sample_size})</span></div>
+                      <div className="ba-bar-track"><div className="ba-bar-fill" style={{ width: `${Math.min(100, (Number(c.multiplier) / 3) * 100)}%` }} /></div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
@@ -617,9 +654,21 @@ export default function Home() {
                         <div className="ba-result">
                           {results.personas.map((p, idx) => (
                             <div className="ba-persona" key={idx}>
-                              <div className="ba-kv"><b>{p.name}</b><span className="ba-mono" style={{ color: "var(--dim)" }}>{p.age_group}</span></div>
+                              <div className="ba-kv">
+                                <b>{p.name}</b>
+                                <span className="ba-mono" style={{ color: "var(--dim)" }}>
+                                  {p.age_group} · 비중 {Math.round((p.audience_share ?? 0) * 100)}%
+                                </span>
+                              </div>
                               <div className="ba-kv"><b>페인포인트</b><span>{p.pain_point}</span></div>
                               <div className="ba-kv"><b>결정요인</b><span>{p.decision_factor}</span></div>
+                              {p.lifestyle?.primary_platforms && p.lifestyle.primary_platforms.length > 0 && (
+                                <div className="ba-tags" style={{ marginTop: 6 }}>
+                                  {p.lifestyle.primary_platforms.map((pl, pidx) => (
+                                    <span className="ba-tag" key={pidx}>{pl.channel} {Math.round(pl.weight * 100)}%</span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -632,7 +681,7 @@ export default function Home() {
                               <div className="ba-bar-top"><span>{c.name}</span><span className="ba-mono">{c.percent}%</span></div>
                               <div className="ba-bar-track"><div className="ba-bar-fill" style={{ width: `${c.percent}%` }} /></div>
                               <div className="ba-bar-reason ba-mono">
-                                지출 {c.spend.toLocaleString()}원 · 효과지수 {c.response} · Adstock λ {c.decay}
+                                지출 {c.spend.toLocaleString()}원 · 실현효과지수 {c.response} (원천 {c.rawEffect} × 친화도 {Math.round(c.affinity * 100)}%) · Adstock λ {c.decay} · 학습보정 {c.calibration}x
                               </div>
                               <div className="ba-bar-reason">{c.reason}</div>
                             </div>
@@ -653,8 +702,18 @@ export default function Home() {
                         <div className="ba-result">
                           {(results.creative.copies || []).map((c, idx) => (
                             <div className="ba-copy-card" key={idx}>
-                              <div className="ba-copy-head">{c.headline}</div>
+                              <div className="ba-copy-head">
+                                {c.headline}
+                                {c.framework && <span className="ba-framework-badge">{c.framework}</span>}
+                              </div>
                               <div className="ba-copy-body">{c.body}</div>
+                              {c.framework_breakdown && c.framework_breakdown.length > 0 && (
+                                <div className="ba-framework-breakdown">
+                                  {c.framework_breakdown.map((f, fidx) => (
+                                    <div key={fidx}><b>[{f.step}]</b> {f.text}</div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                           {results.creative.short_form_concept && (
@@ -748,6 +807,32 @@ export default function Home() {
                 );
               })}
             </div>
+
+            {results.roas && (
+              <div className="ba-result" style={{ marginTop: 16 }}>
+                <div className="ba-node-label" style={{ marginBottom: 10 }}>예상 ROAS (Strategy Engine 배분 기반, AI 추정)</div>
+                {results.roas.channels.map((c, idx) => (
+                  <div className="ba-bar-row" key={idx}>
+                    <div className="ba-bar-top"><span>{c.channel}</span><span className="ba-mono">{c.roas}x</span></div>
+                    <div className="ba-bar-track"><div className="ba-bar-fill" style={{ width: `${Math.min(100, (c.roas / 5) * 100)}%` }} /></div>
+                    <div className="ba-bar-reason ba-mono">매출(추정) {c.revenue.toLocaleString()}원 · 전환 {c.conversions.toLocaleString()}건</div>
+                  </div>
+                ))}
+                <div className="ba-clv-grid" style={{ marginTop: 12 }}>
+                  <div className="ba-clv-metric">
+                    <div className="ba-clv-metric-label">즉시 ROAS (첫 구매 매출 기준)</div>
+                    <div className="ba-clv-metric-value">{results.roas.blended.immediateROAS}x</div>
+                  </div>
+                  <div className="ba-clv-metric">
+                    <div className="ba-clv-metric-label">LTV 기준 ROAS (재구매 가치 반영)</div>
+                    <div className="ba-clv-metric-value">{results.roas.blended.ltvROAS}x</div>
+                  </div>
+                </div>
+                <div className="ba-trigger" style={{ borderColor: "var(--dim)", color: "var(--dim)" }}>
+                  AI 추정 · 업계 평균 벤치마크 기반, 실측 아님. 실제 캠페인 성과와 다를 수 있습니다.
+                </div>
+              </div>
+            )}
 
             {stage === ENGINES.length && (
               <>
