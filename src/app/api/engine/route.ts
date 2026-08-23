@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1000,
+        max_tokens: 4000,
         system,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
     const text = (data.content || []).map((b: any) => b.text || "").join("\n");
     if (!text) {
       return NextResponse.json({ error: "Claude로부터 빈 응답을 받았습니다." }, { status: 502 });
+    }
+    if (data.stop_reason === "max_tokens") {
+      return NextResponse.json(
+        { error: "응답이 길이 제한으로 잘렸습니다 (max_tokens 초과). 프롬프트를 줄이거나 max_tokens를 늘려야 합니다." },
+        { status: 502 }
+      );
     }
     return NextResponse.json({ text });
   } catch (e: any) {
