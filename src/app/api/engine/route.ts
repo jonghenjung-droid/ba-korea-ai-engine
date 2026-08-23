@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 // Brand / Customer / Creative / Strategy(서술) 엔진이 이 라우트를 통해 Claude를 호출한다.
 // ANTHROPIC_API_KEY는 서버 환경변수로만 존재하며 브라우저로 절대 전달되지 않는다.
 export async function POST(req: NextRequest) {

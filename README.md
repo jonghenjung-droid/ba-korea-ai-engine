@@ -1,4 +1,4 @@
-# BA KOREA AI Marketing Agent — 7 Engine Pipeline
+# BA KOREA AI Marketing Agent — 7 Engine Pipeline + 실시간 시장 데이터 루프
 
 Next.js + Supabase + Vercel 기반 실제 배포용 프로젝트입니다.
 Brand → Customer → Media → Strategy(MMM) → Creative → Analytics → CLV, 7개 엔진이 순차 실행됩니다.
@@ -6,6 +6,19 @@ Brand → Customer → Media → Strategy(MMM) → Creative → Analytics → CL
 - **Brand / Customer / Creative / Strategy(서술)**: 서버 API Route(`/api/engine`)가 Claude API를 호출합니다. API 키는 서버에만 존재하며 브라우저에 노출되지 않습니다.
 - **Media / Strategy(MMM 최적화) / Analytics / CLV**: `src/lib/engines.ts`에 결정론적 로직으로 구현되어 있습니다 (Adstock·Saturation 기반 예산 최적화, 글로벌 컨설팅사 CLV 공식 등).
 - **캠페인 히스토리**: Supabase `campaigns` 테이블에 저장/조회/삭제됩니다.
+- **실시간 시장 데이터 루프 (신규)**: 수집 → 정제 → 저장 → RAG 분석 → 피드백, 5단계 루프가 구현되어 있습니다 (아래 참고).
+
+## 실시간 시장 데이터 루프 구조
+
+| 단계 | 구현 위치 | 설명 |
+|---|---|---|
+| 1. 수집 | `/api/market/ingest` (Vercel Cron 또는 수동 실행) | SerpAPI로 Google Trends(검색량)·Google News(원문)를 추적 키워드별로 수집 |
+| 2. 정제 | `src/lib/marketData.ts` | 수치 정규화, 소스별 신뢰도 가중치(`source_effectiveness`) 부여 |
+| 3. 저장 | Supabase `market_signals`(시계열) / `market_documents`(pgvector 임베딩) | TimescaleDB/Pinecone 대신 Postgres + pgvector로 경량 구현 |
+| 4. 분석(RAG) | `/api/market/query` | Strategy Engine이 Claude를 호출하기 전에 벡터 유사도 검색 + 최근 시그널을 컨텍스트로 주입 |
+| 5. 피드백 | `/api/feedback` | 실제 캠페인 성과(CTR/CVR/ROAS)를 입력하면, 그 캠페인이 참고했던 데이터 소스의 신뢰도 점수를 자동 갱신 |
+
+**중요한 한계**: 이 루프는 `SERPAPI_KEY`(수집)와 `VOYAGE_API_KEY`(임베딩)가 설정되어야 실제로 동작합니다. 둘 다 없어도 나머지 7개 엔진과 앱 전체는 정상 작동하며, 이 두 기능만 자동으로 비활성화됩니다 — 즉 선택적(optional) 확장입니다.
 
 ---
 
@@ -26,13 +39,14 @@ npm run dev
 Claude가 Supabase MCP 연결을 통해 아래 작업을 실제로 완료했습니다.
 
 - 프로젝트 `ba-korea-ai-engine` 생성 (서울 리전 `ap-northeast-2`, 무료 티어)
-- `supabase/schema.sql` 마이그레이션 적용 → `campaigns` 테이블 생성, RLS 활성화 확인 완료
+- `supabase/schema.sql` 마이그레이션 적용 → `campaigns`, `tracked_keywords`, `market_signals`, `market_documents`, `campaign_feedback`, `source_effectiveness` 테이블 생성, RLS 활성화 확인 완료
+- `match_market_documents` pgvector 유사도 검색 함수 생성 완료
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`는 `.env.example`에 실제 값으로 이미 채워져 있습니다.
 
-**직접 해야 하는 것은 딱 하나**입니다 — `service_role` 키는 보안상 API로 조회할 수 없어 대시보드에서 직접 복사해야 합니다.
+**직접 해야 하는 것은 딱 하나**입니다 — `service_role`(또는 신형 `sb_secret_...`) 키는 보안상 API로 조회할 수 없어 대시보드에서 직접 복사해야 합니다.
 
-1. [Supabase 대시보드 - ba-korea-ai-engine 프로젝트](https://supabase.com/dashboard/project/bukrhzcfyfepqxpqnezu/settings/api) 접속
-2. **Project API keys** 섹션에서 `service_role` 키를 복사
+1. [Supabase 대시보드 - ba-korea-ai-engine 프로젝트](https://supabase.com/dashboard/project/bukrhzcfyfepqxpqnezu/settings/api-keys) 접속
+2. **Secret keys** 섹션에서 키를 복사 (눈 아이콘 클릭 후 복사)
 3. `.env.local`(로컬 실행 시) 또는 Vercel 환경변수(배포 시)의 `SUPABASE_SERVICE_ROLE_KEY`에 붙여넣기
 
 ---
@@ -43,7 +57,16 @@ Claude가 Supabase MCP 연결을 통해 아래 작업을 실제로 완료했습�
 
 ---
 
-## 4. GitHub에 올리기
+## 4. (선택) 실시간 시장 데이터 API 키 발급
+
+이 단계를 건너뛰어도 앱의 7개 엔진은 모두 정상 동작합니다. 실시간 시장 데이터 루프까지 쓰려면:
+
+1. [serpapi.com](https://serpapi.com) 가입 → API 키 발급 → `SERPAPI_KEY`
+2. [voyageai.com](https://www.voyageai.com) 가입 → API 키 발급 → `VOYAGE_API_KEY`
+
+---
+
+## 5. GitHub에 올리기
 
 이 프로젝트 폴더에서:
 
@@ -60,16 +83,19 @@ git push -u origin main
 
 ---
 
-## 5. Vercel에 배포하기
+## 6. Vercel에 배포하기
 
 1. [vercel.com](https://vercel.com) 에서 New Project → 방금 올린 GitHub 저장소 Import.
-2. **Environment Variables**에 아래 4개를 등록합니다 (Production/Preview/Development 모두 체크 권장):
-   - `ANTHROPIC_API_KEY`
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+2. **Environment Variables**에 아래를 등록합니다 (Production/Preview/Development 모두 체크 권장):
+   - `ANTHROPIC_API_KEY` (필수)
+   - `NEXT_PUBLIC_SUPABASE_URL` (필수)
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (필수)
+   - `SUPABASE_SERVICE_ROLE_KEY` (필수)
+   - `SERPAPI_KEY` (선택 - 실시간 수집용)
+   - `VOYAGE_API_KEY` (선택 - RAG 임베딩용)
 3. Deploy 클릭. 빌드가 끝나면 발급되는 `*.vercel.app` 주소로 바로 접속 가능합니다.
 4. 이후 `main` 브랜치에 push할 때마다 Vercel이 자동으로 재배포합니다.
+5. `vercel.json`에 설정된 Cron(`/api/market/ingest`, 매일 03:00 UTC)이 자동 등록됩니다. **Vercel Hobby(무료) 플랜은 Cron이 하루 1회로 제한**되므로, 더 자주 수집하려면 Pro 플랜이 필요합니다. 무료 플랜에서는 앱 화면의 "지금 수집 실행" 버튼으로 수동 수집하시면 됩니다.
 
 ---
 
@@ -84,11 +110,18 @@ src/
     api/
       engine/route.ts      # Claude API 프록시 (서버 전용, API 키 보호)
       campaigns/route.ts    # 캠페인 히스토리 CRUD (Supabase)
+      market/
+        keywords/route.ts   # 추적 키워드 관리 (1단계 대상 설정)
+        ingest/route.ts     # 실시간 수집 (1~3단계: SerpAPI → 정제 → 저장)
+        query/route.ts      # RAG 검색 (4단계: pgvector 유사도 + 최근 시그널)
+      feedback/route.ts     # 성과 피드백 → 소스 신뢰도 자동 갱신 (5단계)
   lib/
     engines.ts              # Media/Strategy(MMM)/Analytics/CLV 계산 로직
+    marketData.ts           # 임베딩(Voyage) · SerpAPI 수집 헬퍼
     supabaseAdmin.ts        # Supabase 서버 클라이언트 (service role)
 supabase/
-  schema.sql                # DB 스키마 (SQL Editor에서 1회 실행)
+  schema.sql                # DB 스키마 (SQL Editor에서 1회 실행 - 이미 실제 프로젝트에 적용 완료)
+vercel.json                  # Cron 설정 (일 1회 자동 수집)
 ```
 
 ---
@@ -97,5 +130,7 @@ supabase/
 
 - **Brand Engine**: 사용자가 텍스트로 브랜드를 설명해야 합니다. 실제 URL 크롤링(Firecrawl)은 연동되어 있지 않습니다.
 - **Creative Engine**: 카피/숏폼 컨셉 텍스트까지만 생성합니다. 실제 이미지·영상 생성(ComfyUI + Wan2.1)은 별도 백엔드가 필요합니다.
-- **Media/Strategy/Analytics/CLV 엔진**: 실제 캠페인 이력 데이터 없이 합리적 가정값으로 즉시 계산되는 결정론적 로직입니다. Meta Robyn/Google LightweightMMM 같은 실제 통계 모델, Geo-Lift 실험 보정은 적용되어 있지 않습니다.
+- **Media/Strategy(MMM)/Analytics/CLV 엔진**: 실제 캠페인 이력 데이터 없이 합리적 가정값으로 즉시 계산되는 결정론적 로직입니다. 실제 Robyn/LightweightMMM 통계 모델, Geo-Lift 실험 보정은 적용되어 있지 않습니다.
+- **실시간 시장 데이터 루프**: SerpAPI/Voyage 무료·저가 티어 기준으로 설계되어 있어 대량 키워드·고빈도 수집에는 요금제 조정이 필요합니다. `market_documents`의 pgvector 인덱스(ivfflat)는 데이터가 적을 때는 비효율적이므로, 문서가 충분히 쌓인 후(수백 건 이상) `REINDEX`를 권장합니다. 소스 신뢰도 갱신은 캠페인 단위로 참고 소스 전체에 동일 가중치를 적용하는 단순화된 방식입니다 (실제로는 문서별 기여도를 분리 추적하는 것이 더 정교합니다).
 - 인증(로그인)과 워크스페이스별 데이터 분리는 아직 없습니다. 현재는 단일 팀 내부 도구로 설계되어 있습니다.
+

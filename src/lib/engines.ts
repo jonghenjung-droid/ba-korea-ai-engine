@@ -6,7 +6,7 @@ export type Brand = { tone: string; usp: string; target_summary: string; keyword
 export type Persona = { name: string; age_group: string; pain_point: string; decision_factor: string };
 export type MediaScore = { name: string; score: number };
 export type StrategyChannel = { name: string; spend: number; percent: number; response: number; decay: number; reason: string };
-export type Strategy = { channels: StrategyChannel[]; summary: string };
+export type Strategy = { channels: StrategyChannel[]; summary: string; ragSources?: string[] };
 export type Analytics = { impressions: number; clicks: number; conversions: number; trigger: string };
 export type CLVResult = {
   mt: number; cac: number; ltv: number; clv: number; ratio: number | null;

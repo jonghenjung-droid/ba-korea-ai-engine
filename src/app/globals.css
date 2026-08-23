@@ -165,6 +165,7 @@ html, body {
 .ba-history-del { background: none; border: none; color: var(--dim); cursor: pointer; padding: 4px; flex-shrink: 0; }
 .ba-history-del:hover { color: #FF9494; }
 .ba-history-empty { color: var(--dim); font-size: 12px; text-align: center; padding: 16px 0; }
+.ba-feedback-form { border: 1px solid var(--line); border-top: none; border-radius: 0 0 8px 8px; padding: 10px; margin: -8px 0 8px; background: var(--panel2); }
 
 .ba-state-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--dim); font-size: 12px; margin-top: 20px; }
 .ba-state-json { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 8px; white-space: pre-wrap; word-break: break-all; }

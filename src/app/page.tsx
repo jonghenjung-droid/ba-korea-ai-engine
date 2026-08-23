@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   Layers, Users, Target, Sparkles, Radar, LineChart, Repeat,
   Play, RotateCcw, Loader2, ChevronDown, AlertCircle, Wand2, History, Trash2, Clock,
+  Rss, Plus, X, Gauge,
 } from "lucide-react";
 import {
   Brand, Persona, MediaScore, Strategy, Analytics, CLVResult,
@@ -88,7 +89,112 @@ export default function Home() {
   const [discountPct, setDiscountPct] = useState(10);
   const [years, setYears] = useState(3);
 
+  const [trackedKeywords, setTrackedKeywords] = useState<{ keyword: string }[]>([]);
+  const [newKeyword, setNewKeyword] = useState("");
+  const [ingestStatus, setIngestStatus] = useState<string | null>(null);
+  const [ingesting, setIngesting] = useState(false);
+  const [sourceScores, setSourceScores] = useState<{ source: string; score: number; sample_size: number }[]>([]);
+  const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
+  const [feedbackForm, setFeedbackForm] = useState({ channel: "", actual_ctr: "", actual_cvr: "", actual_roas: "", notes: "" });
+  const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
+
   const running = stage >= 0 && stage < ENGINES.length;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/market/keywords");
+        const data = await res.json();
+        if (res.ok) setTrackedKeywords(data.keywords || []);
+      } catch (e) {
+        // 키워드 목록은 부가 기능이므로 실패해도 조용히 무시
+      }
+      try {
+        const res = await fetch("/api/feedback");
+        const data = await res.json();
+        if (res.ok) setSourceScores(data.sourceScores || []);
+      } catch (e) {
+        // 소스 점수도 부가 기능이므로 조용히 무시
+      }
+    })();
+  }, []);
+
+  async function addKeyword() {
+    if (!newKeyword.trim()) return;
+    try {
+      const res = await fetch("/api/market/keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: newKeyword.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTrackedKeywords((k) => [data.keyword, ...k.filter((x) => x.keyword !== data.keyword.keyword)]);
+        setNewKeyword("");
+      }
+    } catch (e) {
+      // 무시 - 부가 기능
+    }
+  }
+
+  async function removeKeyword(keyword: string) {
+    setTrackedKeywords((k) => k.filter((x) => x.keyword !== keyword));
+    try {
+      await fetch(`/api/market/keywords?keyword=${encodeURIComponent(keyword)}`, { method: "DELETE" });
+    } catch (e) {
+      // 무시
+    }
+  }
+
+  async function runIngestNow() {
+    setIngesting(true);
+    setIngestStatus(null);
+    try {
+      const res = await fetch("/api/market/ingest");
+      const data = await res.json();
+      if (!res.ok) {
+        setIngestStatus(data.error || "수집 실패");
+      } else if (data.error) {
+        setIngestStatus(data.error);
+      } else {
+        setIngestStatus(`시그널 ${data.signals_ingested ?? 0}건, 문서 ${data.documents_ingested ?? 0}건 수집 완료`);
+      }
+    } catch (e: any) {
+      setIngestStatus("수집 중 오류가 발생했습니다.");
+    } finally {
+      setIngesting(false);
+    }
+  }
+
+  async function submitFeedback(campaignId: string) {
+    setFeedbackStatus(null);
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaign_id: campaignId,
+          channel: feedbackForm.channel || null,
+          actual_ctr: feedbackForm.actual_ctr ? Number(feedbackForm.actual_ctr) : null,
+          actual_cvr: feedbackForm.actual_cvr ? Number(feedbackForm.actual_cvr) : null,
+          actual_roas: feedbackForm.actual_roas ? Number(feedbackForm.actual_roas) : null,
+          notes: feedbackForm.notes || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFeedbackStatus(data.error || "저장 실패");
+        return;
+      }
+      setFeedbackStatus("피드백이 저장되었고, 참고했던 데이터 소스의 신뢰도 점수가 갱신되었습니다.");
+      setFeedbackForm({ channel: "", actual_ctr: "", actual_cvr: "", actual_roas: "", notes: "" });
+      const scoresRes = await fetch("/api/feedback");
+      const scoresData = await scoresRes.json();
+      if (scoresRes.ok) setSourceScores(scoresData.sourceScores || []);
+    } catch (e) {
+      setFeedbackStatus("피드백 저장 중 오류가 발생했습니다.");
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -190,9 +296,35 @@ export default function Home() {
 
       setStage(3);
       const optimized = computeMMMAllocation(media, budget);
+
+      // 4단계: RAG - 실시간 수집 데이터(시그널/문서)에서 관련 컨텍스트 조회
+      let ragContext = "";
+      let ragSources: string[] = [];
+      try {
+        const ragRes = await fetch("/api/market/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: `${brand.tone} ${brand.usp} ${goal}`, keywords: brand.keywords }),
+        });
+        const ragData = await ragRes.json();
+        if (ragRes.ok && ragData.hasData) {
+          const docLines = (ragData.documents || []).map((d: any) => `- [${d.source}] ${d.title || d.content}`).join("\n");
+          const sigLines = (ragData.signals || [])
+            .slice(0, 5)
+            .map((s: any) => `- [${s.source}] ${s.keyword}: ${s.metric}=${s.value}`)
+            .join("\n");
+          ragContext = `\n\n실시간 시장 데이터 (참고):\n${docLines}\n${sigLines}`;
+          ragSources = Array.from(
+            new Set([...(ragData.documents || []).map((d: any) => d.source), ...(ragData.signals || []).map((s: any) => s.source)])
+          );
+        }
+      } catch (e) {
+        // RAG 조회 실패는 전체 파이프라인을 막지 않음 - 시장 데이터 없이 진행
+      }
+
       const narrative = await callClaude(
-        "너는 AI Strategy Engine이다. MMM(Adstock·Saturation) 최적화 엔진이 이미 산출한 채널별 예산 배분 결과에 대해, 브랜드/타깃 관점의 배정 이유를 채널마다 한 문장씩 설명하고 전체 전략을 한 줄로 요약한다. 배분 비율(percent) 자체는 절대 바꾸지 말고 이유만 작성한다. JSON으로만 답하라.",
-        `Brand DNA: ${JSON.stringify(brand)}\nPersonas: ${JSON.stringify(personas)}\n마케팅 목표: ${goal}\nMMM 최적화 배분 결과: ${JSON.stringify(optimized.map((o) => ({ name: o.name, percent: o.percent })))}\n\n다음 형식의 JSON으로만 답하라:\n{"channel_reasons":[{"name":"채널명","reason":"배정 이유 한 문장"}], "summary":"전체 전략 한 줄 요약"}`
+        "너는 AI Strategy Engine이다. MMM(Adstock·Saturation) 최적화 엔진이 이미 산출한 채널별 예산 배분 결과에 대해, 브랜드/타깃 관점의 배정 이유를 채널마다 한 문장씩 설명하고 전체 전략을 한 줄로 요약한다. 실시간 시장 데이터가 주어지면 그 추세도 반영해서 설명한다. 배분 비율(percent) 자체는 절대 바꾸지 말고 이유만 작성한다. JSON으로만 답하라.",
+        `Brand DNA: ${JSON.stringify(brand)}\nPersonas: ${JSON.stringify(personas)}\n마케팅 목표: ${goal}\nMMM 최적화 배분 결과: ${JSON.stringify(optimized.map((o) => ({ name: o.name, percent: o.percent })))}${ragContext}\n\n다음 형식의 JSON으로만 답하라:\n{"channel_reasons":[{"name":"채널명","reason":"배정 이유 한 문장"}], "summary":"전체 전략 한 줄 요약"}`
       );
       const reasonMap: Record<string, string> = Object.fromEntries(
         (narrative.channel_reasons || []).map((c: any) => [c.name, c.reason])
@@ -200,6 +332,7 @@ export default function Home() {
       const strategy: Strategy = {
         channels: optimized.map((o) => ({ ...o, reason: reasonMap[o.name] || "" })),
         summary: narrative.summary || "",
+        ragSources,
       };
       setResults((r) => ({ ...r, strategy }));
 
@@ -345,24 +478,101 @@ export default function Home() {
               )}
               <div className="ba-history-list">
                 {history.map((h) => (
-                  <div className="ba-history-item" key={h.id} onClick={() => loadFromHistory(h)}>
-                    <div>
-                      <div className="ba-history-item-name">{h.name}</div>
-                      <div className="ba-history-item-meta">
-                        <Clock size={10} style={{ display: "inline", marginRight: 3, verticalAlign: -1 }} />
-                        {new Date(h.created_at).toLocaleString("ko-KR")} · {h.goal} · {Number(h.budget).toLocaleString()}원
+                  <div key={h.id}>
+                    <div className="ba-history-item" onClick={() => loadFromHistory(h)}>
+                      <div>
+                        <div className="ba-history-item-name">{h.name}</div>
+                        <div className="ba-history-item-meta">
+                          <Clock size={10} style={{ display: "inline", marginRight: 3, verticalAlign: -1 }} />
+                          {new Date(h.created_at).toLocaleString("ko-KR")} · {h.goal} · {Number(h.budget).toLocaleString()}원
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          className="ba-history-del"
+                          type="button"
+                          title="실제 성과 입력"
+                          onClick={(e) => { e.stopPropagation(); setFeedbackOpenId(feedbackOpenId === h.id ? null : h.id); setFeedbackStatus(null); }}
+                        >
+                          <Gauge size={14} />
+                        </button>
+                        <button
+                          className="ba-history-del"
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); deleteFromHistory(h.id); }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
-                    <button
-                      className="ba-history-del"
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); deleteFromHistory(h.id); }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {feedbackOpenId === h.id && (
+                      <div className="ba-feedback-form" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          className="ba-input"
+                          style={{ marginBottom: 8 }}
+                          placeholder="채널명 (예: 메타 (Meta))"
+                          value={feedbackForm.channel}
+                          onChange={(e) => setFeedbackForm((f) => ({ ...f, channel: e.target.value }))}
+                        />
+                        <div className="ba-adv-grid">
+                          <input className="ba-input" type="number" step="0.001" placeholder="실제 CTR (예: 0.02)" value={feedbackForm.actual_ctr} onChange={(e) => setFeedbackForm((f) => ({ ...f, actual_ctr: e.target.value }))} />
+                          <input className="ba-input" type="number" step="0.001" placeholder="실제 CVR (예: 0.04)" value={feedbackForm.actual_cvr} onChange={(e) => setFeedbackForm((f) => ({ ...f, actual_cvr: e.target.value }))} />
+                        </div>
+                        <input className="ba-input" type="number" step="0.1" placeholder="실제 ROAS (예: 2.5)" value={feedbackForm.actual_roas} onChange={(e) => setFeedbackForm((f) => ({ ...f, actual_roas: e.target.value }))} />
+                        <textarea className="ba-textarea" placeholder="메모 (선택)" value={feedbackForm.notes} onChange={(e) => setFeedbackForm((f) => ({ ...f, notes: e.target.value }))} />
+                        {feedbackStatus && <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>{feedbackStatus}</div>}
+                        <button className="ba-btn" type="button" onClick={() => submitFeedback(h.id)}>성과 저장 & 소스 신뢰도 갱신</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="ba-panel ba-history-panel">
+              <div className="ba-history-head">
+                <Rss size={13} />
+                실시간 시장 데이터 루프
+              </div>
+              <label className="ba-label">추적 키워드</label>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                <input
+                  className="ba-input"
+                  style={{ marginBottom: 0 }}
+                  placeholder="예: 글램핑, 프리미엄 캠핑"
+                  value={newKeyword}
+                  onChange={(e) => setNewKeyword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addKeyword()}
+                />
+                <button className="ba-btn" style={{ width: 44 }} type="button" onClick={addKeyword}><Plus size={16} /></button>
+              </div>
+              <div className="ba-tags" style={{ marginBottom: 12 }}>
+                {trackedKeywords.map((k) => (
+                  <span className="ba-tag" key={k.keyword} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {k.keyword}
+                    <X size={11} style={{ cursor: "pointer" }} onClick={() => removeKeyword(k.keyword)} />
+                  </span>
+                ))}
+                {trackedKeywords.length === 0 && <span className="ba-history-empty">추적 중인 키워드가 없습니다.</span>}
+              </div>
+
+              <button className="ba-btn ghost" type="button" onClick={runIngestNow} disabled={ingesting}>
+                {ingesting ? <Loader2 size={14} className="ba-spin" /> : <Rss size={14} />}
+                {ingesting ? "수집 중..." : "지금 수집 실행 (수동)"}
+              </button>
+              {ingestStatus && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 8 }}>{ingestStatus}</div>}
+
+              {sourceScores.length > 0 && (
+                <>
+                  <label className="ba-label" style={{ marginTop: 14 }}>데이터 소스 신뢰도 (피드백 루프로 갱신)</label>
+                  {sourceScores.map((s) => (
+                    <div className="ba-bar-row" key={s.source}>
+                      <div className="ba-bar-top"><span className="ba-mono">{s.source}</span><span className="ba-mono">{(s.score * 100).toFixed(0)}점 (n={s.sample_size})</span></div>
+                      <div className="ba-bar-track"><div className="ba-bar-fill" style={{ width: `${s.score * 100}%` }} /></div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
@@ -429,6 +639,12 @@ export default function Home() {
                           ))}
                           {results.strategy.summary && (
                             <div style={{ marginTop: 10, color: "var(--dim)" }}>{results.strategy.summary}</div>
+                          )}
+                          {results.strategy.ragSources && results.strategy.ragSources.length > 0 && (
+                            <div className="ba-tags" style={{ marginTop: 8 }}>
+                              <span style={{ fontSize: 11, color: "var(--dim)" }}>참고한 실시간 시장 데이터 소스:</span>
+                              {results.strategy.ragSources.map((s, idx) => <span className="ba-tag" key={idx}>{s}</span>)}
+                            </div>
                           )}
                         </div>
                       )}
