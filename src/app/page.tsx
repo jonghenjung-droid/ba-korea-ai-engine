@@ -68,7 +68,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     icon: Film,
     system:
       "너는 칸 라이언즈(Cannes Lions) 수상 경력의 글로벌 CF 감독 겸 스토리보드 아티스트다. 주어진 브랜드/캠페인 정보를 바탕으로 15초 영상광고의 씬별 스토리보드를 콘티 형식으로 작성한다. 각 씬마다 타임코드, 화면 설명(카메라 앵글·구도), 대사/자막, 사운드·BGM 디렉션을 구체적으로 명시하고, 마지막에 연출 의도를 한 문단으로 요약한다. 실제 제작 현장에서 그대로 쓸 수 있는 수준으로, 마크다운 헤더(##)와 목록을 사용해 작성하라.",
-    maxTokens: 3000,
+    maxTokens: 5000,
   },
   {
     id: "naming",
@@ -76,7 +76,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     icon: Tag,
     system:
       "너는 Interbrand·Landor 수준의 글로벌 브랜드 네이밍 전문가다. 주어진 브랜드 DNA와 타깃을 바탕으로 캠페인/서브브랜드/신규 라인업 네이밍 후보를 5개 제시한다. 각 후보마다 네이밍 근거(어원·발음·기억용이성), 국제 확장 시 고려사항(발음 문제·기존 상표 충돌 가능성), 톤앤매너 적합도를 설명한다. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
-    maxTokens: 3000,
+    maxTokens: 4000,
   },
   {
     id: "copywriting",
@@ -84,7 +84,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     icon: PenTool,
     system:
       "너는 데이비드 오길비 수준의 글로벌 카피라이터다. 주어진 브랜드/전략/크리에이티브 정보를 바탕으로 매체별(디지털 배너, 소셜 피드, 옥외광고, 인쇄) 헤드라인·바디카피·CTA를 각각 작성한다. 각 매체의 소비 맥락(짧은 체류시간, 스크롤 속도 등)에 맞게 톤과 길이를 다르게 조정하라. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
-    maxTokens: 3000,
+    maxTokens: 4000,
   },
   {
     id: "content_proposal",
@@ -92,7 +92,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     icon: FileText,
     system:
       "너는 글로벌 톱티어 콘텐츠 마케팅 전략가다. 주어진 브랜드/타깃/전략 정보를 바탕으로 3개월 콘텐츠 마케팅 제안서를 작성한다. 콘텐츠 필러(축) 정의, 채널별 콘텐츠 유형과 발행 빈도, 월별 캘린더 개요, 성과 측정 KPI를 포함한 완결된 제안서 형식으로 작성하라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
-    maxTokens: 6000,
+    maxTokens: 7000,
   },
   {
     id: "brand_proposal",
@@ -100,7 +100,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     icon: Briefcase,
     system:
       "너는 Bain·McKinsey 브랜드 프랙티스 수준의 글로벌 브랜드 컨설팅 파트너다. 주어진 모든 캠페인 데이터(브랜드 DNA, 타깃, MMM 예산배분, ROAS, CLV)를 근거로 종합 브랜드 마케팅 제안서를 작성한다. Executive Summary, 브랜드 포지셔닝, 3개년 성장 로드맵, 예산 배분 근거, 기대 효과(ROI 논리)를 포함한 완결된 제안서 형식으로 작성하라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
-    maxTokens: 6000,
+    maxTokens: 7000,
   },
 ];
 
