@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import {
   Layers, Users, Target, Sparkles, Radar, LineChart, Repeat,
   Play, RotateCcw, Loader2, ChevronDown, AlertCircle, Wand2, History, Trash2, Clock,
-  Rss, Plus, X, Gauge,
+  Rss, Plus, X, Gauge, Film, Tag, PenTool, FileText, Briefcase, Copy, Check,
 } from "lucide-react";
 import {
   Brand, Persona, MediaScore, Strategy, Analytics, CLVResult, ROASResult, BlendedROAS, ChannelCalibration,
@@ -59,6 +59,92 @@ const EXAMPLE = {
 
 const EMPTY_RESULTS: Results = { brand: null, personas: null, strategy: null, creative: null, media: null, analytics: null, clv: null, roas: null };
 
+type OutputId = "storyboard" | "naming" | "copywriting" | "content_proposal" | "brand_proposal";
+
+const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; maxTokens: number }[] = [
+  {
+    id: "storyboard",
+    label: "15초 영상광고 스토리보드·콘티",
+    icon: Film,
+    system:
+      "너는 칸 라이언즈(Cannes Lions) 수상 경력의 글로벌 CF 감독 겸 스토리보드 아티스트다. 주어진 브랜드/캠페인 정보를 바탕으로 15초 영상광고의 씬별 스토리보드를 콘티 형식으로 작성한다. 각 씬마다 타임코드, 화면 설명(카메라 앵글·구도), 대사/자막, 사운드·BGM 디렉션을 구체적으로 명시하고, 마지막에 연출 의도를 한 문단으로 요약한다. 실제 제작 현장에서 그대로 쓸 수 있는 수준으로, 마크다운 헤더(##)와 목록을 사용해 작성하라.",
+    maxTokens: 3000,
+  },
+  {
+    id: "naming",
+    label: "브랜드 네이밍",
+    icon: Tag,
+    system:
+      "너는 Interbrand·Landor 수준의 글로벌 브랜드 네이밍 전문가다. 주어진 브랜드 DNA와 타깃을 바탕으로 캠페인/서브브랜드/신규 라인업 네이밍 후보를 5개 제시한다. 각 후보마다 네이밍 근거(어원·발음·기억용이성), 국제 확장 시 고려사항(발음 문제·기존 상표 충돌 가능성), 톤앤매너 적합도를 설명한다. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
+    maxTokens: 3000,
+  },
+  {
+    id: "copywriting",
+    label: "카피라이팅",
+    icon: PenTool,
+    system:
+      "너는 데이비드 오길비 수준의 글로벌 카피라이터다. 주어진 브랜드/전략/크리에이티브 정보를 바탕으로 매체별(디지털 배너, 소셜 피드, 옥외광고, 인쇄) 헤드라인·바디카피·CTA를 각각 작성한다. 각 매체의 소비 맥락(짧은 체류시간, 스크롤 속도 등)에 맞게 톤과 길이를 다르게 조정하라. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
+    maxTokens: 3000,
+  },
+  {
+    id: "content_proposal",
+    label: "콘텐츠 마케팅 제안서",
+    icon: FileText,
+    system:
+      "너는 글로벌 톱티어 콘텐츠 마케팅 전략가다. 주어진 브랜드/타깃/전략 정보를 바탕으로 3개월 콘텐츠 마케팅 제안서를 작성한다. 콘텐츠 필러(축) 정의, 채널별 콘텐츠 유형과 발행 빈도, 월별 캘린더 개요, 성과 측정 KPI를 포함한 완결된 제안서 형식으로 작성하라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
+    maxTokens: 6000,
+  },
+  {
+    id: "brand_proposal",
+    label: "브랜드 마케팅 제안서",
+    icon: Briefcase,
+    system:
+      "너는 Bain·McKinsey 브랜드 프랙티스 수준의 글로벌 브랜드 컨설팅 파트너다. 주어진 모든 캠페인 데이터(브랜드 DNA, 타깃, MMM 예산배분, ROAS, CLV)를 근거로 종합 브랜드 마케팅 제안서를 작성한다. Executive Summary, 브랜드 포지셔닝, 3개년 성장 로드맵, 예산 배분 근거, 기대 효과(ROI 논리)를 포함한 완결된 제안서 형식으로 작성하라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
+    maxTokens: 6000,
+  },
+];
+
+function buildContextPrompt(r: Results, meta: { name: string; desc: string; goal: string; budget: number }) {
+  return `브랜드명: ${meta.name}\n브랜드 설명: ${meta.desc}\n마케팅 목표: ${meta.goal}\n총 예산: ${meta.budget.toLocaleString()}원\n\nBrand DNA: ${JSON.stringify(r.brand)}\nPersonas: ${JSON.stringify(r.personas)}\nStrategy(MMM 배분): ${JSON.stringify(r.strategy)}\n기존 Creative 결과: ${JSON.stringify(r.creative)}\nROAS: ${JSON.stringify(r.roas)}\nAnalytics: ${JSON.stringify(r.analytics)}\nCLV: ${JSON.stringify(r.clv)}\n\n위 데이터를 최대한 근거로 활용해 산출물을 작성하라. 데이터에 없는 부분은 브랜드 톤에 맞게 전문가로서 합리적으로 채워도 된다.`;
+}
+
+function renderLite(text: string) {
+  const lines = text.split("\n");
+  const blocks: JSX.Element[] = [];
+  let listBuffer: string[] = [];
+  let key = 0;
+
+  function renderInline(line: string) {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) =>
+      part.startsWith("**") && part.endsWith("**") ? <b key={i}>{part.slice(2, -2)}</b> : <span key={i}>{part}</span>
+    );
+  }
+
+  function flushList() {
+    if (listBuffer.length > 0) {
+      blocks.push(
+        <ul className="ba-md-list" key={`ul-${key++}`}>
+          {listBuffer.map((item, i) => <li key={i}>{renderInline(item)}</li>)}
+        </ul>
+      );
+      listBuffer = [];
+    }
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("### ")) { flushList(); blocks.push(<h4 className="ba-md-h4" key={key++}>{renderInline(line.slice(4))}</h4>); }
+    else if (line.startsWith("## ")) { flushList(); blocks.push(<h3 className="ba-md-h3" key={key++}>{renderInline(line.slice(3))}</h3>); }
+    else if (line.startsWith("# ")) { flushList(); blocks.push(<h2 className="ba-md-h2" key={key++}>{renderInline(line.slice(2))}</h2>); }
+    else if (line.startsWith("- ") || line.startsWith("* ")) { listBuffer.push(line.slice(2)); }
+    else if (line === "") { flushList(); }
+    else { flushList(); blocks.push(<p className="ba-md-p" key={key++}>{renderInline(line)}</p>); }
+  }
+  flushList();
+  return blocks;
+}
+
 async function callClaude(system: string, prompt: string) {
   const res = await fetch("/api/engine", {
     method: "POST",
@@ -101,6 +187,9 @@ export default function Home() {
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
   const [feedbackForm, setFeedbackForm] = useState({ channel: "", actual_ctr: "", actual_cvr: "", actual_roas: "", notes: "" });
   const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
+
+  const [outputs, setOutputs] = useState<Record<string, { loading: boolean; text: string | null; error: string | null }>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const running = stage >= 0 && stage < ENGINES.length;
 
@@ -208,6 +297,33 @@ export default function Home() {
     } catch (e) {
       setFeedbackStatus("피드백 저장 중 오류가 발생했습니다.");
     }
+  }
+
+  async function generateOutput(def: (typeof OUTPUT_DEFS)[number]) {
+    setOutputs((o) => ({ ...o, [def.id]: { loading: true, text: null, error: null } }));
+    try {
+      const prompt = buildContextPrompt(results, { name, desc, goal, budget });
+      const res = await fetch("/api/engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: def.system, prompt, max_tokens: def.maxTokens }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: null, error: data.error || "생성 실패" } }));
+        return;
+      }
+      setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: data.text, error: null } }));
+    } catch (e: any) {
+      setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: null, error: "생성 중 오류가 발생했습니다." } }));
+    }
+  }
+
+  function copyOutput(id: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
   }
 
   useEffect(() => {
@@ -831,6 +947,59 @@ export default function Home() {
                 <div className="ba-trigger" style={{ borderColor: "var(--dim)", color: "var(--dim)" }}>
                   AI 추정 · 업계 평균 벤치마크 기반, 실측 아님. 실제 캠페인 성과와 다를 수 있습니다.
                 </div>
+              </div>
+            )}
+
+            {stage === ENGINES.length && (
+              <div className="ba-result" style={{ marginTop: 16 }}>
+                <div className="ba-node-label" style={{ marginBottom: 4 }}>추가 산출물 (글로벌 전문가 리포트)</div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 12 }}>
+                  위에서 만든 캠페인 데이터를 근거로, 각 분야 글로벌 전문가 관점의 산출물을 추가로 생성합니다.
+                </div>
+                <div className="ba-output-grid">
+                  {OUTPUT_DEFS.map((def) => {
+                    const Icon = def.icon;
+                    const state = outputs[def.id];
+                    return (
+                      <button
+                        key={def.id}
+                        className="ba-output-btn"
+                        type="button"
+                        onClick={() => generateOutput(def)}
+                        disabled={state?.loading}
+                      >
+                        {state?.loading ? <Loader2 size={16} className="ba-spin" /> : <Icon size={16} />}
+                        {def.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {OUTPUT_DEFS.map((def) => {
+                  const state = outputs[def.id];
+                  if (!state) return null;
+                  return (
+                    <div className="ba-output-panel" key={def.id}>
+                      <div className="ba-output-panel-head">
+                        <span>{def.label}</span>
+                        {state.text && (
+                          <button className="ba-copy-btn" type="button" onClick={() => copyOutput(def.id, state.text!)}>
+                            {copiedId === def.id ? <Check size={12} /> : <Copy size={12} />}
+                            {copiedId === def.id ? "복사됨" : "복사"}
+                          </button>
+                        )}
+                      </div>
+                      {state.loading && <div className="ba-history-empty">전문가 관점으로 생성 중...</div>}
+                      {state.error && (
+                        <div className="ba-error">
+                          <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                          <span>{state.error}</span>
+                        </div>
+                      )}
+                      {state.text && <div className="ba-md">{renderLite(state.text)}</div>}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

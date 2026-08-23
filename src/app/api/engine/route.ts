@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 // Brand / Customer / Creative / Strategy(서술) 엔진이 이 라우트를 통해 Claude를 호출한다.
 // ANTHROPIC_API_KEY는 서버 환경변수로만 존재하며 브라우저로 절대 전달되지 않는다.
 export async function POST(req: NextRequest) {
-  const { system, prompt } = await req.json();
+  const { system, prompt, max_tokens: req_max_tokens } = await req.json();
 
   if (!prompt) {
     return NextResponse.json({ error: "prompt가 필요합니다." }, { status: 400 });
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
+        max_tokens: Math.min(Math.max(Number(req_max_tokens) || 4000, 500), 8000),
         system,
         messages: [{ role: "user", content: prompt }],
       }),
