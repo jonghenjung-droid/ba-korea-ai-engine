@@ -59,48 +59,85 @@ const EXAMPLE = {
 
 const EMPTY_RESULTS: Results = { brand: null, personas: null, strategy: null, creative: null, media: null, analytics: null, clv: null, roas: null };
 
-type OutputId = "storyboard" | "naming" | "copywriting" | "content_proposal" | "brand_proposal";
+type OutputId = "brand_diagnosis" | "proposal_diagnosis" | "bizplan_diagnosis" | "event_diagnosis" | "storyboard" | "copywriting" | "content_proposal" | "brand_proposal";
 
-const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; maxTokens: number }[] = [
+const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; maxTokens: number; cta?: { label: string; url: string }; group: "diagnosis" | "creative" }[] = [
+  {
+    id: "brand_diagnosis",
+    label: "브랜드 방향 무료진단 (RTB 체크)",
+    icon: Tag,
+    system:
+      "너는 CBO(Chief Brand Officer) 출신 브랜드 컨설턴트다. 주어진 브랜드 DNA·페르소나·전략 데이터를 근거로, 이 브랜드가 인지→신뢰→재방문→단골 4단계 중 어디쯤 있고 어디서 막힐 위험이 큰지 진단한다. 특히 RTB(Reason To Buy, '왜 다시 이 브랜드를 찾아야 하는가'에 대한 근거)가 데이터상 명확한지 점검한다. 정확히 4개 항목(막힌 단계 진단, RTB 명확성, 근거, 다음 액션 힌트 1개)만 3~4문장씩 간결하게 제시하고, 장황한 서론은 생략한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 처방이 아니라 방향 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+    maxTokens: 3000,
+    cta: { label: "정밀 진단 + 실행 가이드 컨설팅 (599,000원~)", url: "https://kmong.com/gig/806486" },
+    group: "diagnosis",
+  },
+  {
+    id: "proposal_diagnosis",
+    label: "제안서·RFP 심사 취약점 진단",
+    icon: FileText,
+    system:
+      "너는 정부·대기업 제안서를 다수 심사해온 평가위원 출신 컨설턴트다. 주어진 브랜드/전략/크리에이티브 데이터를 하나의 사업 제안서라고 가정하고, 심사자 관점에서 이 제안이 가진 취약점을 정확히 4가지만 짚는다 (예: 논리 비약, 차별화 근거 부족, 정량 데이터 약함, 실행 계획 구체성 부족 등 실제 발견되는 것만). 각 항목은 문제 + 왜 심사자가 감점할지 + 어떤 보완이 필요한지를 합쳐 3문장 이내로 간결하게 작성한다. 억지로 문제를 만들지 말고, 데이터상 실제 약한 부분만 지적한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 채점이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+    maxTokens: 3000,
+    cta: { label: "논리 구조 재설계 컨설팅 (199,000원~)", url: "https://kmong.com/gig/807073" },
+    group: "diagnosis",
+  },
+  {
+    id: "bizplan_diagnosis",
+    label: "사업계획서 관점 점검 포인트",
+    icon: Briefcase,
+    system:
+      "너는 정부지원사업 평가위원 경험이 있는 사업계획서 컨설턴트다. 주어진 브랜드/전략/ROAS/CLV 데이터를 사업계획서의 '사업성·시장성·BM(수익모델)' 관점에서 점검한다. 잘 갖춰진 점 2가지와, 사업계획서로 옮겨 쓸 때 반드시 보강해야 할 점 3가지를 우선순위 순서로 제시한다. 각 항목은 2~3문장으로 간결하게, 장황한 설명은 생략한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 선정 가능성을 보장하는 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+    maxTokens: 3000,
+    cta: { label: "사업계획서 점검·보강 컨설팅 (19,900원~)", url: "https://kmong.com/gig/806456" },
+    group: "diagnosis",
+  },
+  {
+    id: "event_diagnosis",
+    label: "행사·활성화 이벤트 리스크 점검",
+    icon: Briefcase,
+    system:
+      "너는 20개국 이상에서 오프라인 행사·팝업·활성화 이벤트를 총괄해온 글로벌 이벤트 기획 실무자다. 주어진 브랜드/타깃/크리에이티브 데이터를 바탕으로, 이 캠페인의 일환으로 오프라인 활성화 이벤트(팝업스토어, 런칭 이벤트, 체험 부스 등)를 연다고 가정하고 기획 리스크를 점검한다. 정확히 4가지 항목(컨셉이 타깃에게 통할지, 동선·경험 설계 리스크, 예산 대비 임팩트 우려, 성과 측정(KPI) 설계 여부)만 2~3문장으로 간결하게 짚는다. 억지로 문제를 만들지 말고 데이터상 실제 약한 부분만 지적한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+    maxTokens: 3000,
+    cta: { label: "행사 컨셉·구조·KPI 설계 컨설팅 (199,000원~)", url: "https://kmong.com/gig/806963" },
+    group: "diagnosis",
+  },
   {
     id: "storyboard",
     label: "15초 영상광고 스토리보드·콘티",
     icon: Film,
     system:
-      "너는 칸 라이언즈(Cannes Lions) 수상 경력의 글로벌 CF 감독 겸 스토리보드 아티스트다. 주어진 브랜드/캠페인 정보를 바탕으로 15초 영상광고의 씬별 스토리보드를 콘티 형식으로 작성한다. 반드시 5~6개 씬으로만 구성하고(15초를 초과하지 않도록), 각 씬 설명은 타임코드 + 화면 설명(카메라 앵글·구도) + 대사/자막 + 사운드 디렉션을 합쳐 3문장 이내로 간결하게 작성한다. 장황한 서술 없이, 실제 촬영 현장에서 바로 참고할 수 있는 압축된 콘티 형식을 유지하라. 마지막에 연출 의도를 1~2문장으로 요약한다. 마크다운 헤더(##)와 목록을 사용하라.",
+      "너는 칸 라이언즈(Cannes Lions) 수상 경력의 글로벌 CF 감독 겸 스토리보드 아티스트다. 주어진 브랜드/캠페인 정보를 바탕으로 15초 영상광고의 씬별 스토리보드를 콘티 형식으로 작성한다. 반드시 5~6개 씬으로만 구성하고(15초를 초과하지 않도록), 각 씬 설명은 타임코드 + 화면 설명(카메라 앵글·구도) + 대사/자막 + 사운드 디렉션을 합쳐 3문장 이내로 간결하게 작성한다. 장황한 서술 없이, 실제 촬영 현장에서 바로 참고할 수 있는 압축된 콘티 형식을 유지하라. 마지막에 연출 의도를 1~2문장으로 요약한다. 전체 분량은 반드시 1200단어를 넘기지 마라. 마크다운 헤더(##)와 목록을 사용하라.",
     maxTokens: 8000,
-  },
-  {
-    id: "naming",
-    label: "브랜드 네이밍",
-    icon: Tag,
-    system:
-      "너는 Interbrand·Landor 수준의 글로벌 브랜드 네이밍 전문가다. 주어진 브랜드 DNA와 타깃을 바탕으로 캠페인/서브브랜드/신규 라인업 네이밍 후보를 5개 제시한다. 각 후보마다 네이밍 근거(어원·발음·기억용이성), 국제 확장 시 고려사항(발음 문제·기존 상표 충돌 가능성), 톤앤매너 적합도를 설명한다. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
-    maxTokens: 4000,
+    group: "creative",
   },
   {
     id: "copywriting",
     label: "카피라이팅",
     icon: PenTool,
     system:
-      "너는 데이비드 오길비 수준의 글로벌 카피라이터다. 주어진 브랜드/전략/크리에이티브 정보를 바탕으로 매체별(디지털 배너, 소셜 피드, 옥외광고, 인쇄) 헤드라인·바디카피·CTA를 각각 작성한다. 각 매체의 소비 맥락(짧은 체류시간, 스크롤 속도 등)에 맞게 톤과 길이를 다르게 조정하라. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
-    maxTokens: 4000,
+      "너는 데이비드 오길비 수준의 글로벌 카피라이터다. 주어진 브랜드/전략/크리에이티브 정보를 바탕으로 정확히 4개 매체(디지털 배너, 소셜 피드, 옥외광고, 인쇄)에 대해서만 헤드라인 1개 + 바디카피 1문장 + CTA 한 문구를 작성한다. 매체당 이 3가지 요소 외에 부연 설명을 덧붙이지 않는다. 전체 분량은 반드시 800단어를 넘기지 마라. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
+    maxTokens: 6000,
+    group: "creative",
   },
   {
     id: "content_proposal",
     label: "콘텐츠 마케팅 제안서",
     icon: FileText,
     system:
-      "너는 글로벌 톱티어 콘텐츠 마케팅 전략가다. 주어진 브랜드/타깃/전략 정보를 바탕으로 3개월 콘텐츠 마케팅 제안서를 작성한다. 콘텐츠 필러(축) 정의, 채널별 콘텐츠 유형과 발행 빈도, 월별 캘린더 개요, 성과 측정 KPI를 포함한 완결된 제안서 형식으로 작성하라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
-    maxTokens: 7000,
+      "너는 글로벌 톱티어 콘텐츠 마케팅 전략가다. 주어진 브랜드/타깃/전략 정보를 바탕으로 3개월 콘텐츠 마케팅 제안서를 작성한다. 콘텐츠 필러(축) 정확히 3개, 채널별 콘텐츠 유형과 발행 빈도(표 형식), 월별 캘린더 개요(각 달 1~2줄), 성과 측정 KPI 3~5개만 간결하게 제시하고, 장황한 서론·결론은 생략한다. 전체 분량은 A4 1.5페이지 분량(약 1500단어)을 넘기지 마라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
+    maxTokens: 7500,
+    group: "creative",
   },
   {
     id: "brand_proposal",
     label: "브랜드 마케팅 제안서",
     icon: Briefcase,
     system:
-      "너는 Bain·McKinsey 브랜드 프랙티스 수준의 글로벌 브랜드 컨설팅 파트너다. 주어진 모든 캠페인 데이터(브랜드 DNA, 타깃, MMM 예산배분, ROAS, CLV)를 근거로 종합 브랜드 마케팅 제안서를 작성한다. Executive Summary, 브랜드 포지셔닝, 3개년 성장 로드맵, 예산 배분 근거, 기대 효과(ROI 논리)를 포함한 완결된 제안서 형식으로 작성하라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
-    maxTokens: 7000,
+      "너는 Bain·McKinsey 브랜드 프랙티스 수준의 글로벌 브랜드 컨설팅 파트너다. 주어진 모든 캠페인 데이터(브랜드 DNA, 타깃, MMM 예산배분, ROAS, CLV)를 근거로 종합 브랜드 마케팅 제안서를 작성한다. Executive Summary(3~4문장), 브랜드 포지셔닝(짧은 문단), 3개년 성장 로드맵(연차별 1~2줄), 예산 배분 근거(짧은 문단), 기대 효과(불릿 3~5개)로만 구성하고, 장황한 부연 설명은 생략한다. 전체 분량은 A4 2페이지 분량(약 2000단어)을 넘기지 마라. 마크다운 헤더(#, ##)와 목록을 사용해 문서 구조를 명확히 하라.",
+    maxTokens: 7500,
+    cta: { label: "브랜드 비전·미션 설계 컨설팅 (599,000원~)", url: "https://kmong.com/gig/806486" },
+    group: "creative",
   },
 ];
 
@@ -153,6 +190,7 @@ async function callClaude(system: string, prompt: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `API 호출 실패 (${res.status})`);
+  if (data.truncated) throw new Error("응답이 길이 제한으로 잘렸습니다. 잠시 후 다시 시도해 주세요.");
   return extractJSON(data.text);
 }
 
@@ -166,6 +204,8 @@ export default function Home() {
   const [results, setResults] = useState<Results>(EMPTY_RESULTS);
   const [showState, setShowState] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showMethodology, setShowMethodology] = useState(false);
+  const [showDataLoop, setShowDataLoop] = useState(false);
   const [history, setHistory] = useState<CampaignRecord[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -188,13 +228,14 @@ export default function Home() {
   const [feedbackForm, setFeedbackForm] = useState({ channel: "", actual_ctr: "", actual_cvr: "", actual_roas: "", notes: "" });
   const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null);
 
-  const [outputs, setOutputs] = useState<Record<string, { loading: boolean; text: string | null; error: string | null }>>({});
+  const [outputs, setOutputs] = useState<Record<string, { loading: boolean; text: string | null; error: string | null; truncated?: boolean }>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const running = stage >= 0 && stage < ENGINES.length;
 
+  // 초기 로딩 시 4개의 독립적인 GET을 병렬로 실행 (기존엔 순차 대기라 첫 화면이 그만큼 늦게 완성됐음)
   useEffect(() => {
-    (async () => {
+    async function loadKeywords() {
       try {
         const res = await fetch("/api/market/keywords");
         const data = await res.json();
@@ -202,6 +243,8 @@ export default function Home() {
       } catch (e) {
         // 키워드 목록은 부가 기능이므로 실패해도 조용히 무시
       }
+    }
+    async function loadFeedbackScores() {
       try {
         const res = await fetch("/api/feedback");
         const data = await res.json();
@@ -209,6 +252,8 @@ export default function Home() {
       } catch (e) {
         // 소스 점수도 부가 기능이므로 조용히 무시
       }
+    }
+    async function loadCalibration() {
       try {
         const res = await fetch("/api/market/calibration");
         const data = await res.json();
@@ -216,7 +261,20 @@ export default function Home() {
       } catch (e) {
         // 보정값도 부가 기능이므로 조용히 무시
       }
-    })();
+    }
+    async function loadHistory() {
+      try {
+        const res = await fetch("/api/campaigns");
+        const data = await res.json();
+        if (res.ok) setHistory(data.campaigns || []);
+        else setHistoryError(data.error || "히스토리를 불러오지 못했습니다.");
+      } catch (e) {
+        setHistoryError("히스토리를 불러오지 못했습니다.");
+      } finally {
+        setHistoryLoaded(true);
+      }
+    }
+    Promise.allSettled([loadKeywords(), loadFeedbackScores(), loadCalibration(), loadHistory()]);
   }, []);
 
   async function addKeyword() {
@@ -313,7 +371,7 @@ export default function Home() {
         setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: null, error: data.error || "생성 실패" } }));
         return;
       }
-      setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: data.text, error: null } }));
+      setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: data.text, error: null, truncated: !!data.truncated } }));
     } catch (e: any) {
       setOutputs((o) => ({ ...o, [def.id]: { loading: false, text: null, error: "생성 중 오류가 발생했습니다." } }));
     }
@@ -325,21 +383,6 @@ export default function Home() {
       setTimeout(() => setCopiedId(null), 1500);
     });
   }
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/campaigns");
-        const data = await res.json();
-        if (res.ok) setHistory(data.campaigns || []);
-        else setHistoryError(data.error || "히스토리를 불러오지 못했습니다.");
-      } catch (e) {
-        setHistoryError("히스토리를 불러오지 못했습니다.");
-      } finally {
-        setHistoryLoaded(true);
-      }
-    })();
-  }, []);
 
   async function saveCampaignToHistory(record: { name: string; description: string; goal: string; budget: number; results: Results }) {
     try {
@@ -429,28 +472,31 @@ export default function Home() {
       const optimized = computeMMMAllocation(media, budget, calibrationMap);
 
       // 4단계: RAG - 실시간 수집 데이터(시그널/문서)에서 관련 컨텍스트 조회
+      // 추적 키워드가 없으면 애초에 데이터가 쌓였을 리 없으므로, 불필요한 API 왕복을 생략한다.
       let ragContext = "";
       let ragSources: string[] = [];
-      try {
-        const ragRes = await fetch("/api/market/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: `${brand.tone} ${brand.usp} ${goal}`, keywords: brand.keywords }),
-        });
-        const ragData = await ragRes.json();
-        if (ragRes.ok && ragData.hasData) {
-          const docLines = (ragData.documents || []).map((d: any) => `- [${d.source}] ${d.title || d.content}`).join("\n");
-          const sigLines = (ragData.signals || [])
-            .slice(0, 5)
-            .map((s: any) => `- [${s.source}] ${s.keyword}: ${s.metric}=${s.value}`)
-            .join("\n");
-          ragContext = `\n\n실시간 시장 데이터 (참고):\n${docLines}\n${sigLines}`;
-          ragSources = Array.from(
-            new Set([...(ragData.documents || []).map((d: any) => d.source), ...(ragData.signals || []).map((s: any) => s.source)])
-          );
+      if (trackedKeywords.length > 0) {
+        try {
+          const ragRes = await fetch("/api/market/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: `${brand.tone} ${brand.usp} ${goal}`, keywords: brand.keywords }),
+          });
+          const ragData = await ragRes.json();
+          if (ragRes.ok && ragData.hasData) {
+            const docLines = (ragData.documents || []).map((d: any) => `- [${d.source}] ${d.title || d.content}`).join("\n");
+            const sigLines = (ragData.signals || [])
+              .slice(0, 5)
+              .map((s: any) => `- [${s.source}] ${s.keyword}: ${s.metric}=${s.value}`)
+              .join("\n");
+            ragContext = `\n\n실시간 시장 데이터 (참고):\n${docLines}\n${sigLines}`;
+            ragSources = Array.from(
+              new Set([...(ragData.documents || []).map((d: any) => d.source), ...(ragData.signals || []).map((s: any) => s.source)])
+            );
+          }
+        } catch (e) {
+          // RAG 조회 실패는 전체 파이프라인을 막지 않음 - 시장 데이터 없이 진행
         }
-      } catch (e) {
-        // RAG 조회 실패는 전체 파이프라인을 막지 않음 - 시장 데이터 없이 진행
       }
 
       const narrative = await callClaude(
@@ -504,16 +550,26 @@ export default function Home() {
   return (
     <div className="ba-root">
       <div className="ba-wrap">
-        <div className="ba-eyebrow">BA KOREA · Next.js + Supabase · PRODUCTION</div>
-        <h1 className="ba-title">AI Marketing Agent<br />— 7 Engine Pipeline</h1>
+        <div className="ba-eyebrow">BA KOREA · AI GROWTH AGENT</div>
+        <h1 className="ba-title">AI Growth Agent</h1>
         <p className="ba-sub">
-          브랜드 정보를 입력하면 Brand → Customer → Media → Strategy → Creative → Analytics → CLV 순으로 에이전트가 순차 실행됩니다.
-          Customer Engine이 만든 페르소나의 라이프스타일(채널 습관·비중)이 Media Engine의 채널 친화도 매칭에 그대로 연결되고, Strategy 엔진은
-          Meta Robyn·Google LightweightMMM 방법론(Adstock 이월효과·Saturation 포화곡선) × 그 친화도 × 실제 성과로 학습된 보정값을 곱해 예산을 최적화합니다.
-          Creative Engine은 마케팅 목표에 맞는 카피라이팅 프레임워크(AIDA·PAS·StoryBrand·Cialdini)를 선택해 카피를 생성하고, Analytics Engine은
-          Strategy의 채널별 배분·ROAS 계산과 동일한 숫자를 그대로 합산해 퍼널을 산출합니다. CLV 엔진은 글로벌 컨설팅사(Bain·McKinsey·Gartner·BCG)
-          통합 공식으로 계산되며, 실행 결과는 Supabase에 저장되어 언제든 다시 불러볼 수 있습니다.
+          브랜드 캠페인 시뮬레이션(Brand→Customer→Media→Strategy→Creative→Analytics→CLV 7개 엔진)부터, 사업계획서·제안서·행사 기획의
+          무료 사전진단까지 — BA KOREA의 실제 컨설팅 노하우를 AI로 먼저 체험해보는 도구입니다.
         </p>
+
+        <div className="ba-methodology-toggle" onClick={() => setShowMethodology((s) => !s)}>
+          <ChevronDown size={12} style={{ transform: showMethodology ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+          엔진 작동 방식 자세히 보기
+        </div>
+        {showMethodology && (
+          <p className="ba-sub ba-methodology-detail">
+            Customer Engine이 만든 페르소나의 라이프스타일(채널 습관·비중)이 Media Engine의 채널 친화도 매칭에 그대로 연결되고, Strategy 엔진은
+            Meta Robyn·Google LightweightMMM 방법론(Adstock 이월효과·Saturation 포화곡선) × 그 친화도 × 실제 성과로 학습된 보정값을 곱해 예산을 최적화합니다.
+            Creative Engine은 마케팅 목표에 맞는 카피라이팅 프레임워크(AIDA·PAS·StoryBrand·Cialdini)를 선택해 카피를 생성하고, Analytics Engine은
+            Strategy의 채널별 배분·ROAS 계산과 동일한 숫자를 그대로 합산해 퍼널을 산출합니다. CLV 엔진은 글로벌 컨설팅사(Bain·McKinsey·Gartner·BCG)
+            통합 공식으로 계산되며, 실행 결과는 Supabase에 저장되어 언제든 다시 불러볼 수 있습니다.
+          </p>
+        )}
 
         <div className="ba-grid">
           <div className="ba-sidebar">
@@ -671,10 +727,13 @@ export default function Home() {
             </div>
 
             <div className="ba-panel ba-history-panel">
-              <div className="ba-history-head">
+              <div className="ba-history-head ba-collapsible-head" onClick={() => setShowDataLoop((s) => !s)}>
                 <Rss size={13} />
-                실시간 시장 데이터 루프
+                고급: 실시간 시장 데이터 & 자동학습
+                <ChevronDown size={12} style={{ marginLeft: "auto", transform: showDataLoop ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
               </div>
+              {showDataLoop && (
+                <div style={{ marginTop: 12 }}>
               <label className="ba-label">추적 키워드</label>
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                 <input
@@ -726,12 +785,25 @@ export default function Home() {
                   ))}
                 </>
               )}
+                </div>
+              )}
             </div>
           </div>
 
           <div>
             {stage === -1 && !results.brand && (
               <div className="ba-idle">왼쪽에서 브랜드 정보를 입력하고 &lsquo;AI 에이전트 실행&rsquo;을 눌러 파이프라인을 시작하세요.</div>
+            )}
+
+            {stage === ENGINES.length && (
+              <div className="ba-quicknav">
+                <a href="#engine-strategy">전략</a>
+                <a href="#section-roas">ROAS</a>
+                <a href="#engine-clv">CLV</a>
+                <a href="#section-diagnosis">무료진단</a>
+                <a href="#section-creative">실행물</a>
+                <a href="#section-state">원본데이터</a>
+              </div>
             )}
 
             <div className="ba-pipeline">
@@ -742,7 +814,7 @@ export default function Home() {
                 const hasResult = (results as any)[eng.key];
                 if (stage === -1 && !hasResult) return null;
                 return (
-                  <div className="ba-node" key={eng.key}>
+                  <div className="ba-node" key={eng.key} id={`engine-${eng.key}`}>
                     <div className="ba-node-rail">
                       <div className={`ba-node-dot ${isDone ? "done" : isActive ? "active" : ""}`}>
                         {isActive ? <Loader2 size={16} className="ba-spin" /> : <Icon size={16} />}
@@ -925,7 +997,7 @@ export default function Home() {
             </div>
 
             {results.roas && (
-              <div className="ba-result" style={{ marginTop: 16 }}>
+              <div className="ba-result" style={{ marginTop: 16 }} id="section-roas">
                 <div className="ba-node-label" style={{ marginBottom: 10 }}>예상 ROAS (Strategy Engine 배분 기반, AI 추정)</div>
                 {results.roas.channels.map((c, idx) => (
                   <div className="ba-bar-row" key={idx}>
@@ -951,13 +1023,36 @@ export default function Home() {
             )}
 
             {stage === ENGINES.length && (
-              <div className="ba-result" style={{ marginTop: 16 }}>
-                <div className="ba-node-label" style={{ marginBottom: 4 }}>추가 산출물 (글로벌 전문가 리포트)</div>
+              <div className="ba-result" style={{ marginTop: 16 }} id="section-diagnosis">
+                <div className="ba-node-label" style={{ marginBottom: 4 }}>무료 사전진단</div>
                 <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 12 }}>
-                  위에서 만든 캠페인 데이터를 근거로, 각 분야 글로벌 전문가 관점의 산출물을 추가로 생성합니다.
+                  BA KOREA가 실제로 판매 중인 컨설팅 상품과 동일한 깊이의 예비진단입니다. 확정 판단이 아닌 힌트 수준이며, 각 결과 하단에 정식 상담 링크가 있습니다.
                 </div>
                 <div className="ba-output-grid">
-                  {OUTPUT_DEFS.map((def) => {
+                  {OUTPUT_DEFS.filter((d) => d.group === "diagnosis").map((def) => {
+                    const Icon = def.icon;
+                    const state = outputs[def.id];
+                    return (
+                      <button
+                        key={def.id}
+                        className="ba-output-btn"
+                        type="button"
+                        onClick={() => generateOutput(def)}
+                        disabled={state?.loading}
+                      >
+                        {state?.loading ? <Loader2 size={16} className="ba-spin" /> : <Icon size={16} />}
+                        {def.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="ba-node-label" style={{ marginTop: 20, marginBottom: 4 }} id="section-creative">실행 크리에이티브</div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 12 }}>
+                  캠페인을 바로 실행할 때 쓸 수 있는 산출물입니다.
+                </div>
+                <div className="ba-output-grid">
+                  {OUTPUT_DEFS.filter((d) => d.group === "creative").map((def) => {
                     const Icon = def.icon;
                     const state = outputs[def.id];
                     return (
@@ -996,7 +1091,19 @@ export default function Home() {
                           <span>{state.error}</span>
                         </div>
                       )}
+                      {state.truncated && state.text && (
+                        <div className="ba-error" style={{ borderColor: "var(--amber)", color: "var(--amber)" }}>
+                          <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                          <span>응답이 길이 제한으로 일부 잘렸습니다. 아래는 잘리기 전까지 생성된 내용입니다 — 필요하면 다시 생성해 보세요.</span>
+                        </div>
+                      )}
                       {state.text && <div className="ba-md">{renderLite(state.text)}</div>}
+                      {state.text && def.cta && (
+                        <a className="ba-cta-banner" href={def.cta.url} target="_blank" rel="noopener noreferrer">
+                          <span>이 진단은 참고용 예비 진단입니다. 실제 컨설팅이 필요하시면 →</span>
+                          <b>{def.cta.label}</b>
+                        </a>
+                      )}
                     </div>
                   );
                 })}
@@ -1005,7 +1112,7 @@ export default function Home() {
 
             {stage === ENGINES.length && (
               <>
-                <div className="ba-state-toggle" onClick={() => setShowState((s) => !s)}>
+                <div className="ba-state-toggle" onClick={() => setShowState((s) => !s)} id="section-state">
                   <ChevronDown size={13} style={{ transform: showState ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
                   Campaign State (JSON) 보기
                 </div>

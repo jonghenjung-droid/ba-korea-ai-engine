@@ -48,13 +48,10 @@ export async function POST(req: NextRequest) {
     if (!text) {
       return NextResponse.json({ error: "Claude로부터 빈 응답을 받았습니다." }, { status: 502 });
     }
-    if (data.stop_reason === "max_tokens") {
-      return NextResponse.json(
-        { error: "응답이 길이 제한으로 잘렸습니다 (max_tokens 초과). 프롬프트를 줄이거나 max_tokens를 늘려야 합니다." },
-        { status: 502 }
-      );
-    }
-    return NextResponse.json({ text });
+    // stop_reason이 max_tokens여도 에러로 막지 않고, 지금까지 생성된 부분 텍스트를 truncated 플래그와 함께 반환한다.
+    // JSON 파싱이 필요한 호출(callClaude)은 클라이언트에서 이 플래그를 보고 실패 처리하지만,
+    // 자유 서식 산출물(generateOutput)은 잘린 상태라도 사용자에게 보여주는 편이 낫다.
+    return NextResponse.json({ text, truncated: data.stop_reason === "max_tokens" });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "알 수 없는 오류" }, { status: 500 });
   }
