@@ -191,6 +191,7 @@ export default function Home() {
   const [budget, setBudget] = useState(5000000);
   const [goal, setGoal] = useState("전환");
   const [url, setUrl] = useState("");
+  const [socialUrl, setSocialUrl] = useState("");
   const [competitors, setCompetitors] = useState("");
   const [currentIssue, setCurrentIssue] = useState("");
   const [existingSlogan, setExistingSlogan] = useState("");
@@ -475,26 +476,59 @@ export default function Home() {
     try {
       setStage(0);
 
-      // URL이 입력되어 있으면 자동으로 본문 텍스트를 긁어와 Brand Engine 컨텍스트에 추가한다.
+      // "브랜드 설명" 칸에 실수로 URL만 통째로 입력한 경우를 자동 감지해, 자동 수집 대상에 포함시킨다.
+      const bareUrlInDesc = desc.trim().match(/^(https?:\/\/\S+)$/)?.[1];
+      const effectiveDesc = bareUrlInDesc
+        ? "(브랜드 설명 대신 URL이 입력되어, 아래 자동 수집된 웹페이지 본문을 근거로 분석합니다)"
+        : desc;
+
+      const urlsToTry = Array.from(new Set([url.trim(), socialUrl.trim(), bareUrlInDesc || ""].filter(Boolean)));
       let urlContext = "";
-      if (url.trim()) {
+      const urlFetchMessages: string[] = [];
+
+      for (const u of urlsToTry) {
         try {
           const fetchRes = await fetch("/api/fetch-url", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: url.trim() }),
+            body: JSON.stringify({ url: u }),
           });
           const fetchData = await fetchRes.json();
           if (fetchRes.ok && fetchData.text) {
-            urlContext = `\n웹사이트 본문 (자동 수집):\n${fetchData.text}`;
-            setUrlFetchStatus(null);
+            urlContext += `\n\n${u} 본문 (자동 수집):\n${fetchData.text}`;
           } else {
-            setUrlFetchStatus(fetchData.error || "URL에서 텍스트를 가져오지 못했습니다. 입력하신 브랜드 설명만으로 진행합니다.");
+            urlFetchMessages.push(`${u} → ${fetchData.error || "텍스트를 가져오지 못했습니다"}`);
           }
         } catch (e) {
-          setUrlFetchStatus("URL 수집 중 오류가 발생했습니다. 입력하신 브랜드 설명만으로 진행합니다.");
+          urlFetchMessages.push(`${u} → 수집 중 오류가 발생했습니다`);
         }
       }
+
+      // 보조 경로: SerpAPI가 설정되어 있으면 브랜드명 일반 검색 스니펫도 함께 근거로 활용한다.
+      // 인스타그램·네이버플레이스처럼 자바스크립트 렌더링 페이지는 위 fetch-url로 못 읽는 경우가 많은데,
+      // 검색엔진이 이미 색인해둔 텍스트는 이 경로로 가져올 수 있다.
+      if (name.trim()) {
+        try {
+          const searchRes = await fetch("/api/brand-search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: `${name} 브랜드 후기` }),
+          });
+          const searchData = await searchRes.json();
+          if (searchRes.ok && searchData.snippets && searchData.snippets.length > 0) {
+            urlContext += `\n\n검색 스니펫 (참고):\n${searchData.snippets.map((s: string) => `- ${s}`).join("\n")}`;
+          }
+        } catch (e) {
+          // 검색 보조는 실패해도 파이프라인을 막지 않음
+        }
+      }
+
+      if (urlFetchMessages.length > 0) {
+        setUrlFetchStatus(`${urlFetchMessages.join(" / ")} (입력하신 나머지 정보만으로 진행합니다)`);
+      } else {
+        setUrlFetchStatus(null);
+      }
+
       const extraFields = [
         competitors.trim() ? `경쟁 브랜드: ${competitors.trim()}` : "",
         currentIssue.trim() ? `현재 겪고 있는 문제: ${currentIssue.trim()}` : "",
@@ -504,8 +538,8 @@ export default function Home() {
         .join("\n");
 
       const brand: Brand = await callClaude(
-        "너는 BA KOREA의 AI Brand Engine이다. 입력된 브랜드 정보를 분석해 브랜드 DNA를 JSON으로만 출력한다. 경쟁 브랜드나 현재 문제가 주어졌다면 그 내용을 keywords와 target_summary에 반영하라. 다른 설명은 절대 출력하지 마라.",
-        `브랜드명: ${name}\n브랜드 설명: ${desc}${extraFields ? "\n" + extraFields : ""}${urlContext}\n\n다음 형식의 JSON으로만 답하라:\n{"tone": "브랜드 톤앤매너 한 문장", "usp": "핵심 차별점 한 문장", "target_summary": "핵심 타깃 요약 한 문장", "keywords": ["키워드1","키워드2","키워드3","키워드4"]}`
+        "너는 BA KOREA의 AI Brand Engine이다. 입력된 브랜드 정보를 분석해 브랜드 DNA를 JSON으로만 출력한다. 브랜드명의 글자 뜻을 임의로 해석하지 말고, 반드시 주어진 설명·자동 수집 본문·검색 스니펫 전체를 근거로 업종과 톤을 판단하라. 경쟁 브랜드나 현재 문제가 주어졌다면 그 내용을 keywords와 target_summary에 반영하라. 다른 설명은 절대 출력하지 마라.",
+        `브랜드명: ${name}\n브랜드 설명: ${effectiveDesc}${extraFields ? "\n" + extraFields : ""}${urlContext}\n\n다음 형식의 JSON으로만 답하라:\n{"tone": "브랜드 톤앤매너 한 문장", "usp": "핵심 차별점 한 문장", "target_summary": "핵심 타깃 요약 한 문장", "keywords": ["키워드1","키워드2","키워드3","키워드4"]}`
       );
       setResults((r) => ({ ...r, brand }));
 
@@ -636,7 +670,7 @@ export default function Home() {
               <label className="ba-label">브랜드명</label>
               <input className="ba-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 메종드글램" />
 
-              <label className="ba-label">브랜드 설명 (URL 텍스트도 붙여넣기 가능)</label>
+              <label className="ba-label">브랜드 설명 (실제 설명 문장을 적어주세요 — URL만 넣으면 자동 인식해서 읽어옵니다)</label>
               <textarea className="ba-textarea" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="브랜드/상품/타깃에 대해 자유롭게 설명해 주세요" />
 
               <label className="ba-label">총 예산 (원)</label>
@@ -666,6 +700,11 @@ export default function Home() {
                 <>
                   <label className="ba-label">브랜드 홈페이지 URL (있으면 자동으로 본문을 읽어옵니다)</label>
                   <input className="ba-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." />
+                  <label className="ba-label">소셜 채널 URL (인스타그램/네이버플레이스 등, 선택)</label>
+                  <input className="ba-input" value={socialUrl} onChange={(e) => setSocialUrl(e.target.value)} placeholder="https://instagram.com/..." />
+                  <div style={{ fontSize: 11, color: "var(--dim)", marginTop: -10, marginBottom: 14 }}>
+                    인스타그램 등은 자바스크립트 렌더링 페이지라 자동 수집이 안 될 수 있습니다 — 이 경우 검색엔진 색인 정보로 보조 수집을 시도합니다.
+                  </div>
                   {urlFetchStatus && (
                     <div style={{ fontSize: 12, color: "var(--dim)", marginTop: -10, marginBottom: 14 }}>{urlFetchStatus}</div>
                   )}

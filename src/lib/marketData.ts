@@ -54,3 +54,19 @@ export async function fetchNewsDocs(keyword: string, limit = 5): Promise<NewsDoc
     source: "serpapi_news",
   }));
 }
+
+// Brand Engine 보조: 브랜드명 일반 검색 스니펫 (SerpAPI, 있으면 사용).
+// 인스타그램·네이버플레이스처럼 자바스크립트 렌더링 페이지는 직접 fetch로 못 읽지만,
+// 검색엔진이 이미 색인해둔 텍스트(소개글·리뷰 일부)는 이 경로로 가져올 수 있다.
+export async function fetchBrandSearchSnippets(query: string, limit = 5): Promise<string[]> {
+  const apiKey = process.env.SERPAPI_KEY;
+  if (!apiKey) return [];
+  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(query)}&hl=ko&gl=kr&api_key=${apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const data = await res.json();
+  const items = (data?.organic_results || []).slice(0, limit);
+  return items
+    .map((it: any) => `${it.title || ""} - ${it.snippet || ""}`.trim())
+    .filter((s: string) => s.length > 3);
+}
