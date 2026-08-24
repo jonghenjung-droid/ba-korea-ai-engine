@@ -122,8 +122,18 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
   },
 ];
 
-function buildContextPrompt(r: Results, meta: { name: string; desc: string; goal: string; budget: number }) {
-  return `브랜드명: ${meta.name}\n브랜드 설명: ${meta.desc}\n마케팅 목표: ${meta.goal}\n총 예산: ${meta.budget.toLocaleString()}원\n\nBrand DNA: ${JSON.stringify(r.brand)}\nPersonas: ${JSON.stringify(r.personas)}\nStrategy(MMM 배분): ${JSON.stringify(r.strategy)}\n기존 Creative 결과: ${JSON.stringify(r.creative)}\nROAS: ${JSON.stringify(r.roas)}\nAnalytics: ${JSON.stringify(r.analytics)}\nCLV: ${JSON.stringify(r.clv)}\n\n위 데이터를 최대한 근거로 활용해 산출물을 작성하라. 데이터에 없는 부분은 브랜드 톤에 맞게 전문가로서 합리적으로 채워도 된다.`;
+function buildContextPrompt(
+  r: Results,
+  meta: { name: string; desc: string; goal: string; budget: number; competitors?: string; currentIssue?: string; existingSlogan?: string }
+) {
+  const extra = [
+    meta.competitors ? `경쟁 브랜드: ${meta.competitors}` : "",
+    meta.currentIssue ? `현재 겪고 있는 문제: ${meta.currentIssue}` : "",
+    meta.existingSlogan ? `기존 슬로건/소개 문구: ${meta.existingSlogan}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `브랜드명: ${meta.name}\n브랜드 설명: ${meta.desc}\n마케팅 목표: ${meta.goal}\n총 예산: ${meta.budget.toLocaleString()}원\n${extra ? extra + "\n" : ""}\nBrand DNA: ${JSON.stringify(r.brand)}\nPersonas: ${JSON.stringify(r.personas)}\nStrategy(MMM 배분): ${JSON.stringify(r.strategy)}\n기존 Creative 결과: ${JSON.stringify(r.creative)}\nROAS: ${JSON.stringify(r.roas)}\nAnalytics: ${JSON.stringify(r.analytics)}\nCLV: ${JSON.stringify(r.clv)}\n\n위 데이터를 최대한 근거로 활용해 산출물을 작성하라. 경쟁 브랜드나 현재 문제가 주어졌다면 반드시 그 내용을 근거로 구체적으로 언급하라. 데이터에 없는 부분은 브랜드 톤에 맞게 전문가로서 합리적으로 채워도 된다.`;
 }
 
 function renderLite(text: string) {
@@ -180,6 +190,12 @@ export default function Home() {
   const [desc, setDesc] = useState("");
   const [budget, setBudget] = useState(5000000);
   const [goal, setGoal] = useState("전환");
+  const [url, setUrl] = useState("");
+  const [competitors, setCompetitors] = useState("");
+  const [currentIssue, setCurrentIssue] = useState("");
+  const [existingSlogan, setExistingSlogan] = useState("");
+  const [showExtraInfo, setShowExtraInfo] = useState(false);
+  const [urlFetchStatus, setUrlFetchStatus] = useState<string | null>(null);
   const [stage, setStage] = useState(-1); // -1 idle, 0..N-1 running, N done
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Results>(EMPTY_RESULTS);
@@ -341,7 +357,33 @@ export default function Home() {
   async function generateOutput(def: (typeof OUTPUT_DEFS)[number]) {
     setOutputs((o) => ({ ...o, [def.id]: { loading: true, text: null, error: null } }));
     try {
-      const prompt = buildContextPrompt(results, { name, desc, goal, budget });
+      let prompt = buildContextPrompt(results, { name, desc, goal, budget, competitors, currentIssue, existingSlogan });
+
+      // 진단류 출력물은 등록된 추적 키워드가 있으면 실시간 시장 데이터(RAG)도 함께 근거로 활용한다.
+      if (def.group === "diagnosis" && trackedKeywords.length > 0) {
+        try {
+          const ragRes = await fetch("/api/market/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: `${results.brand?.tone || ""} ${results.brand?.usp || ""} ${goal}`,
+              keywords: results.brand?.keywords || [],
+            }),
+          });
+          const ragData = await ragRes.json();
+          if (ragRes.ok && ragData.hasData) {
+            const docLines = (ragData.documents || []).map((d: any) => `- [${d.source}] ${d.title || d.content}`).join("\n");
+            const sigLines = (ragData.signals || [])
+              .slice(0, 5)
+              .map((s: any) => `- [${s.source}] ${s.keyword}: ${s.metric}=${s.value}`)
+              .join("\n");
+            prompt += `\n\n실시간 시장 데이터 (참고):\n${docLines}\n${sigLines}`;
+          }
+        } catch (e) {
+          // RAG 조회 실패는 진단 생성을 막지 않음
+        }
+      }
+
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -418,6 +460,7 @@ export default function Home() {
     setStage(-1);
     setError(null);
     setResults(EMPTY_RESULTS);
+    setUrlFetchStatus(null);
   }
 
   async function runPipeline() {
@@ -426,13 +469,43 @@ export default function Home() {
       return;
     }
     setError(null);
+    setUrlFetchStatus(null);
     setResults(EMPTY_RESULTS);
 
     try {
       setStage(0);
+
+      // URL이 입력되어 있으면 자동으로 본문 텍스트를 긁어와 Brand Engine 컨텍스트에 추가한다.
+      let urlContext = "";
+      if (url.trim()) {
+        try {
+          const fetchRes = await fetch("/api/fetch-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: url.trim() }),
+          });
+          const fetchData = await fetchRes.json();
+          if (fetchRes.ok && fetchData.text) {
+            urlContext = `\n웹사이트 본문 (자동 수집):\n${fetchData.text}`;
+            setUrlFetchStatus(null);
+          } else {
+            setUrlFetchStatus(fetchData.error || "URL에서 텍스트를 가져오지 못했습니다. 입력하신 브랜드 설명만으로 진행합니다.");
+          }
+        } catch (e) {
+          setUrlFetchStatus("URL 수집 중 오류가 발생했습니다. 입력하신 브랜드 설명만으로 진행합니다.");
+        }
+      }
+      const extraFields = [
+        competitors.trim() ? `경쟁 브랜드: ${competitors.trim()}` : "",
+        currentIssue.trim() ? `현재 겪고 있는 문제: ${currentIssue.trim()}` : "",
+        existingSlogan.trim() ? `기존 슬로건/소개 문구: ${existingSlogan.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
       const brand: Brand = await callClaude(
-        "너는 BA KOREA의 AI Brand Engine이다. 입력된 브랜드 정보를 분석해 브랜드 DNA를 JSON으로만 출력한다. 다른 설명은 절대 출력하지 마라.",
-        `브랜드명: ${name}\n브랜드 설명: ${desc}\n\n다음 형식의 JSON으로만 답하라:\n{"tone": "브랜드 톤앤매너 한 문장", "usp": "핵심 차별점 한 문장", "target_summary": "핵심 타깃 요약 한 문장", "keywords": ["키워드1","키워드2","키워드3","키워드4"]}`
+        "너는 BA KOREA의 AI Brand Engine이다. 입력된 브랜드 정보를 분석해 브랜드 DNA를 JSON으로만 출력한다. 경쟁 브랜드나 현재 문제가 주어졌다면 그 내용을 keywords와 target_summary에 반영하라. 다른 설명은 절대 출력하지 마라.",
+        `브랜드명: ${name}\n브랜드 설명: ${desc}${extraFields ? "\n" + extraFields : ""}${urlContext}\n\n다음 형식의 JSON으로만 답하라:\n{"tone": "브랜드 톤앤매너 한 문장", "usp": "핵심 차별점 한 문장", "target_summary": "핵심 타깃 요약 한 문장", "keywords": ["키워드1","키워드2","키워드3","키워드4"]}`
       );
       setResults((r) => ({ ...r, brand }));
 
@@ -584,6 +657,26 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+
+              <div className="ba-adv-toggle" onClick={() => setShowExtraInfo((s) => !s)}>
+                <ChevronDown size={13} style={{ transform: showExtraInfo ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+                추가 정보 (선택 · 진단 정확도 향상)
+              </div>
+              {showExtraInfo && (
+                <>
+                  <label className="ba-label">브랜드 홈페이지 URL (있으면 자동으로 본문을 읽어옵니다)</label>
+                  <input className="ba-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." />
+                  {urlFetchStatus && (
+                    <div style={{ fontSize: 12, color: "var(--dim)", marginTop: -10, marginBottom: 14 }}>{urlFetchStatus}</div>
+                  )}
+                  <label className="ba-label">경쟁 브랜드 (1~2곳)</label>
+                  <input className="ba-input" value={competitors} onChange={(e) => setCompetitors(e.target.value)} placeholder="예: OO글램핑, XX캠핑장" />
+                  <label className="ba-label">지금 겪고 있는 문제</label>
+                  <textarea className="ba-textarea" style={{ minHeight: 60 }} value={currentIssue} onChange={(e) => setCurrentIssue(e.target.value)} placeholder="예: 광고비는 느는데 매출은 그대로, 재방문율이 낮음 등" />
+                  <label className="ba-label">기존 슬로건/소개 문구 (있는 경우)</label>
+                  <input className="ba-input" value={existingSlogan} onChange={(e) => setExistingSlogan(e.target.value)} placeholder="기존에 쓰던 문구가 있다면 입력해 주세요" />
+                </>
+              )}
 
               <div className="ba-adv-toggle" onClick={() => setShowAdvanced((s) => !s)}>
                 <ChevronDown size={13} style={{ transform: showAdvanced ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
