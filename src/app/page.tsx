@@ -67,7 +67,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     label: "브랜드 방향 무료진단 (RTB 체크)",
     icon: Tag,
     system:
-      "너는 CBO(Chief Brand Officer) 출신 브랜드 컨설턴트다. 주어진 브랜드 DNA·페르소나·전략 데이터를 근거로, 이 브랜드가 인지→신뢰→재방문→단골 4단계 중 어디쯤 있고 어디서 막힐 위험이 큰지 진단한다. 특히 RTB(Reason To Buy, '왜 다시 이 브랜드를 찾아야 하는가'에 대한 근거)가 데이터상 명확한지 점검한다. 정확히 4개 항목(막힌 단계 진단, RTB 명확성, 근거, 다음 액션 힌트 1개)만 3~4문장씩 간결하게 제시하고, 장황한 서론은 생략한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 처방이 아니라 방향 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+      "너는 CBO(Chief Brand Officer) 출신 브랜드 컨설턴트다. 주어진 브랜드 DNA·페르소나·전략 데이터를 근거로, 이 브랜드가 인지→신뢰→재방문→단골 4단계 중 어디쯤 있고 어디서 막힐 위험이 큰지 진단한다. 특히 RTB(Reason To Buy, '왜 다시 이 브랜드를 찾아야 하는가'에 대한 근거)가 데이터상 명확한지 점검한다. 주어진 데이터가 부실하면 web_search로 브랜드명을 직접 검색해 실제 정보를 확인한 뒤 진단하되, 브랜드명 글자만으로 업종을 임의로 단정하지 마라. 정확히 4개 항목(막힌 단계 진단, RTB 명확성, 근거, 다음 액션 힌트 1개)만 3~4문장씩 간결하게 제시하고, 장황한 서론은 생략한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 처방이 아니라 방향 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
     maxTokens: 3000,
     cta: { label: "정밀 진단 + 실행 가이드 컨설팅 (599,000원~)", url: "https://kmong.com/gig/806486" },
     group: "diagnosis",
@@ -77,7 +77,7 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     label: "마케팅 무료 진단",
     icon: Target,
     system:
-      "너는 종합 마케팅 전략 컨설턴트다. 주어진 미디어 믹스(채널별 예산배분), ROAS, Analytics 데이터를 근거로 이 마케팅 전략의 강점 2가지와 리스크 3가지를 진단한다. 예산 배분이 실제로 타깃·목표에 맞게 짜여 있는지, 채널 조합에 놓치고 있는 사각지대는 없는지, 예상 성과(ROAS·전환)가 목표 대비 충분한지를 점검한다. 억지로 문제를 만들지 말고 데이터상 실제 근거가 있는 부분만 짚는다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+      "너는 종합 마케팅 전략 컨설턴트다. 주어진 미디어 믹스(채널별 예산배분), ROAS, Analytics 데이터를 근거로 이 마케팅 전략의 강점 2가지와 리스크 3가지를 진단한다. 예산 배분이 실제로 타깃·목표에 맞게 짜여 있는지, 채널 조합에 놓치고 있는 사각지대는 없는지, 예상 성과(ROAS·전환)가 목표 대비 충분한지를 점검한다. 브랜드 관련 데이터가 부실하면 web_search로 브랜드명을 직접 검색해 실제 업종·경쟁 환경을 확인한 뒤 진단하라. 억지로 문제를 만들지 말고 데이터상 실제 근거가 있는 부분만 짚는다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
     maxTokens: 3000,
     cta: { label: "종합 마케팅 전략 컨설팅 문의", url: "https://kmong.com/@BrandAccelerator" },
     group: "diagnosis",
@@ -173,11 +173,11 @@ function renderLite(text: string) {
   return blocks;
 }
 
-async function callClaude(system: string, prompt: string) {
+async function callClaude(system: string, prompt: string, enableWebSearch = false) {
   const res = await fetch("/api/engine", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system, prompt }),
+    body: JSON.stringify({ system, prompt, enable_web_search: enableWebSearch }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `API 호출 실패 (${res.status})`);
@@ -388,7 +388,7 @@ export default function Home() {
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system: def.system, prompt, max_tokens: def.maxTokens }),
+        body: JSON.stringify({ system: def.system, prompt, max_tokens: def.maxTokens, enable_web_search: def.group === "diagnosis" }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -538,8 +538,9 @@ export default function Home() {
         .join("\n");
 
       const brand: Brand = await callClaude(
-        "너는 BA KOREA의 AI Brand Engine이다. 입력된 브랜드 정보를 분석해 브랜드 DNA를 JSON으로만 출력한다. 브랜드명의 글자 뜻을 임의로 해석하지 말고, 반드시 주어진 설명·자동 수집 본문·검색 스니펫 전체를 근거로 업종과 톤을 판단하라. 경쟁 브랜드나 현재 문제가 주어졌다면 그 내용을 keywords와 target_summary에 반영하라. 다른 설명은 절대 출력하지 마라.",
-        `브랜드명: ${name}\n브랜드 설명: ${effectiveDesc}${extraFields ? "\n" + extraFields : ""}${urlContext}\n\n다음 형식의 JSON으로만 답하라:\n{"tone": "브랜드 톤앤매너 한 문장", "usp": "핵심 차별점 한 문장", "target_summary": "핵심 타깃 요약 한 문장", "keywords": ["키워드1","키워드2","키워드3","키워드4"]}`
+        "너는 BA KOREA의 AI Brand Engine이다. 입력된 브랜드 정보를 분석해 브랜드 DNA를 JSON으로만 출력한다. 브랜드명의 글자 뜻을 임의로 해석하지 마라 (예: '글램'이라는 글자만 보고 뷰티/화장품 브랜드로 단정하지 말 것). 주어진 설명·자동 수집 본문·검색 스니펫이 부실하거나 브랜드의 실제 업종을 파악하기 부족하면, 반드시 web_search 도구로 브랜드명을 직접 검색해 실제 정보(업종, 위치, 특징)를 확인한 뒤 분석하라. 검색 결과와 주어진 정보가 다르면 실제 검색 결과를 우선한다. 경쟁 브랜드나 현재 문제가 주어졌다면 그 내용을 keywords와 target_summary에 반영하라. 최종 출력은 지정된 JSON 형식 외에 다른 설명은 절대 출력하지 마라.",
+        `브랜드명: ${name}\n브랜드 설명: ${effectiveDesc}${extraFields ? "\n" + extraFields : ""}${urlContext}\n\n다음 형식의 JSON으로만 답하라:\n{"tone": "브랜드 톤앤매너 한 문장", "usp": "핵심 차별점 한 문장", "target_summary": "핵심 타깃 요약 한 문장", "keywords": ["키워드1","키워드2","키워드3","키워드4"]}`,
+        true
       );
       setResults((r) => ({ ...r, brand }));
 

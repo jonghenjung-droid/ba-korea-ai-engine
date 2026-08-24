@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 // Brand / Customer / Creative / Strategy(서술) 엔진이 이 라우트를 통해 Claude를 호출한다.
 // ANTHROPIC_API_KEY는 서버 환경변수로만 존재하며 브라우저로 절대 전달되지 않는다.
 export async function POST(req: NextRequest) {
-  const { system, prompt, max_tokens: req_max_tokens } = await req.json();
+  const { system, prompt, max_tokens: req_max_tokens, enable_web_search } = await req.json();
 
   if (!prompt) {
     return NextResponse.json({ error: "prompt가 필요합니다." }, { status: 400 });
@@ -20,6 +20,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const body: any = {
+      model: "claude-sonnet-4-6",
+      max_tokens: Math.min(Math.max(Number(req_max_tokens) || 4000, 500), 8192),
+      system,
+      messages: [{ role: "user", content: prompt }],
+    };
+    // Brand Engine 등 근거가 부실할 수 있는 호출에 한해, Claude가 직접 웹을 검색하도록 허용한다.
+    // 자바스크립트 렌더링 사이트(fetch-url로 못 읽는 페이지)를 우회하는 가장 확실한 방법이다.
+    if (enable_web_search) {
+      body.tools = [{ type: "web_search_20250305", name: "web_search" }];
+    }
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -27,12 +39,7 @@ export async function POST(req: NextRequest) {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: Math.min(Math.max(Number(req_max_tokens) || 4000, 500), 8192),
-        system,
-        messages: [{ role: "user", content: prompt }],
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
