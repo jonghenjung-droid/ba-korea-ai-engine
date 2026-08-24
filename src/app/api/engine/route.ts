@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: Math.min(Math.max(Number(req_max_tokens) || 4000, 500), 8000),
+        max_tokens: Math.min(Math.max(Number(req_max_tokens) || 4000, 500), 8192),
         system,
         messages: [{ role: "user", content: prompt }],
       }),
