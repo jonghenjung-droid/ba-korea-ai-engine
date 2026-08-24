@@ -55,7 +55,7 @@ export type CLVResult = {
 
 // Meta Robyn / Google LightweightMMM(Meridian) 방법론 축소 구현 - 채널별 Adstock 이월 감쇄율(λ)
 export const ADSTOCK_DECAY: Record<string, number> = {
-  "메타 (Meta)": 0.35,
+  "인스타그램 (Meta)": 0.35,
   "네이버 검색광고": 0.15,
   "틱톡 / 숏폼": 0.45,
   "유튜브": 0.4,
@@ -65,7 +65,7 @@ export const CHANNELS = Object.keys(ADSTOCK_DECAY);
 
 // 업계 평균 CPM/CTR/CVR 벤치마크 (하드코딩 시작값 - 실측 데이터가 쌓이면 교체 권장)
 export const CHANNEL_BENCHMARKS: Record<string, { cpm: number; ctr: number; cvr: number }> = {
-  "메타 (Meta)": { cpm: 8000, ctr: 0.015, cvr: 0.025 },
+  "인스타그램 (Meta)": { cpm: 8000, ctr: 0.015, cvr: 0.025 },
   "네이버 검색광고": { cpm: 15000, ctr: 0.035, cvr: 0.045 }, // 검색은 구매의도 높아 CVR 최고
   "카카오모먼트": { cpm: 7000, ctr: 0.012, cvr: 0.03 },
   "유튜브": { cpm: 6000, ctr: 0.01, cvr: 0.015 },
@@ -97,14 +97,33 @@ export function extractJSON<T = any>(text: string): T {
 }
 
 // --- Media Engine: Customer Engine의 페르소나 lifestyle을 audience_share로 가중 평균 ---
-export function runMediaEngine(personas: Persona[]): MediaScore[] {
+// 마케팅 목표 → journey_touchpoints에서 가중치를 부여할 여정 단계
+const GOAL_TO_STAGE: Record<string, string> = {
+  인지도: "awareness",
+  전환: "decision",
+  재구매: "decision",
+};
+
+export function runMediaEngine(personas: Persona[], goal?: string): MediaScore[] {
+  const targetStage = GOAL_TO_STAGE[goal || ""] || "awareness";
+
   return CHANNELS.map((channel) => {
     let weightedSum = 0;
     let totalShare = 0;
     for (const persona of personas) {
       const share = typeof persona.audience_share === "number" ? persona.audience_share : 1 / personas.length;
       const platform = persona.lifestyle?.primary_platforms?.find((p) => p.channel === channel);
-      const channelWeight = platform ? platform.weight : 0.1; // 언급 안 된 채널은 낮은 기본값
+      let channelWeight = platform ? platform.weight : 0.1; // 언급 안 된 채널은 낮은 기본값
+
+      // journey_touchpoints 반영: 이 채널이 목표 단계(예: 전환 목표 → decision 단계)의
+      // 실제 접점이라면 가중치를 끌어올린다 (단순 노출·발견 채널과 실제 결정 채널을 구분).
+      const isTargetStageTouchpoint = persona.lifestyle?.journey_touchpoints?.some(
+        (t) => t.stage === targetStage && t.channel === channel
+      );
+      if (isTargetStageTouchpoint) {
+        channelWeight = Math.min(1, channelWeight * 1.4 + 0.15);
+      }
+
       weightedSum += channelWeight * share;
       totalShare += share;
     }

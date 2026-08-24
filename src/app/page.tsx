@@ -39,7 +39,7 @@ type CampaignRecord = {
 const ENGINES = [
   { key: "brand", label: "Brand Engine", sub: "브랜드 DNA 추출", icon: Layers },
   { key: "customer", label: "Customer Engine", sub: "라이프스타일 페르소나 생성", icon: Users },
-  { key: "media", label: "Media Engine", sub: "페르소나×채널 친화도 매칭", icon: Radar },
+  { key: "media", label: "Media Engine", sub: "페르소나×채널 친화도 매칭 (목표 단계 가중)", icon: Radar },
   { key: "strategy", label: "Strategy Engine", sub: "MMM 예산 최적화 (Adstock·Saturation·친화도)", icon: Target },
   { key: "creative", label: "Creative Engine", sub: "카피라이팅 프레임워크 기반 크리에이티브", icon: Sparkles },
   { key: "analytics", label: "Analytics Engine", sub: "채널별 ROAS 합산 퍼널 & 트리거", icon: LineChart },
@@ -546,14 +546,15 @@ export default function Home() {
 
       setStage(1);
       const customer = await callClaude(
-        "너는 AI Customer Engine이다. Brand DNA를 바탕으로 핵심 타깃 페르소나 3개를 JSON으로만 생성한다. 각 페르소나는 실제 미디어 소비 습관(라이프스타일)을 구체적으로 반영해야 하며, 채널마다 동일한 weight를 주는 것은 금지한다.",
-        `Brand DNA: ${JSON.stringify(brand)}\n\n다음 형식의 JSON으로만 답하라 (channel 값은 반드시 아래 5개 중에서만 사용: "메타 (Meta)", "네이버 검색광고", "카카오모먼트", "유튜브", "틱톡 / 숏폼"):\n{"personas":[{"name":"페르소나 이름(예: 3040 워킹맘 지현)","age_group":"연령대","pain_point":"핵심 페인포인트 한 문장","decision_factor":"구매 결정 요인 한 문장","audience_share":0.4,"lifestyle":{"active_hours":["morning_commute"|"lunch"|"after_work"|"weekend"|"late_night"],"primary_platforms":[{"channel":"채널명","purpose":"discovery"|"verification"|"immersion"|"conversion","weight":0.0}],"content_format_pref":["short_form"|"long_form"|"text"|"live"],"journey_touchpoints":[{"stage":"awareness"|"consideration"|"decision","channel":"채널명"}]}}] } 총 3개 항목, audience_share 합계는 1.0`
+        "너는 AI Customer Engine이다. Brand DNA를 바탕으로 핵심 타깃 페르소나 3개를 JSON으로만 생성한다. 각 페르소나는 실제 미디어 소비 습관(라이프스타일)을 구체적으로 반영해야 하며, 채널마다 동일한 weight를 주는 것은 금지한다. 채널별 weight를 정하기 전에 반드시 web_search로 이 브랜드의 업종·상품군과 타깃 연령대에 맞는 최신 국내 소셜미디어 이용률 통계를 검색해 확인하라(예: 오픈서베이, 나스미디어, DMC미디어, 메조미디어, 방송통신위원회 등의 조사자료). 업종에 따라 실제 채널 이용 패턴은 크게 다르다 — 예를 들어 패션·뷰티·여행·외식은 인스타그램 비중이 높은 편이고, 게임·엔터테인먼트는 유튜브·틱톡 비중이 높은 편이며, B2B·전문서비스는 네이버 검색 비중이 높은 편이다. 이런 일반론에 그치지 말고, 검색으로 확인한 이 브랜드 업종의 실제 통계 수치를 근거로 weight를 배정하라. 검색 결과가 없거나 애매하면 그 경우에만 페르소나의 연령대·라이프스타일 서술에 근거해 합리적으로 추정하라.",
+        `Brand DNA: ${JSON.stringify(brand)}\n\n다음 형식의 JSON으로만 답하라 (channel 값은 반드시 아래 5개 중에서만 사용: "인스타그램 (Meta)", "네이버 검색광고", "카카오모먼트", "유튜브", "틱톡 / 숏폼"):\n{"personas":[{"name":"페르소나 이름(예: 3040 워킹맘 지현)","age_group":"연령대","pain_point":"핵심 페인포인트 한 문장","decision_factor":"구매 결정 요인 한 문장","audience_share":0.4,"lifestyle":{"active_hours":["morning_commute"|"lunch"|"after_work"|"weekend"|"late_night"],"primary_platforms":[{"channel":"채널명","purpose":"discovery"|"verification"|"immersion"|"conversion","weight":0.0}],"content_format_pref":["short_form"|"long_form"|"text"|"live"],"journey_touchpoints":[{"stage":"awareness"|"consideration"|"decision","channel":"채널명"}]}}] } 총 3개 항목, audience_share 합계는 1.0`,
+        true
       );
       const personas: Persona[] = customer.personas || [];
       setResults((r) => ({ ...r, personas }));
 
       setStage(2);
-      const media = runMediaEngine(personas);
+      const media = runMediaEngine(personas, goal);
       setResults((r) => ({ ...r, media }));
 
       setStage(3);
@@ -657,6 +658,10 @@ export default function Home() {
             Creative Engine은 마케팅 목표에 맞는 카피라이팅 프레임워크(AIDA·PAS·StoryBrand·Cialdini)를 선택해 카피를 생성하고, Analytics Engine은
             Strategy의 채널별 배분·ROAS 계산과 동일한 숫자를 그대로 합산해 퍼널을 산출합니다. CLV 엔진은 글로벌 컨설팅사(Bain·McKinsey·Gartner·BCG)
             통합 공식으로 계산되며, 실행 결과는 Supabase에 저장되어 언제든 다시 불러볼 수 있습니다.
+            <br /><br />
+            <b style={{ color: "var(--amber)" }}>참고</b>: Customer Engine의 업종별 SNS 이용 통계는 "실시간"이라 해도 매초 갱신되는 라이브 API 데이터가 아니라,
+            Claude가 그때그때 웹 검색으로 찾아낸 가장 최근에 공개된 조사자료(오픈서베이·나스미디어·DMC미디어 등)를 의미합니다. 고정된 규칙보다는 실제에 가깝지만,
+            방송통신위원회 통계 API 같은 완전한 실시간 연동은 아닙니다.
           </p>
         )}
 
