@@ -59,7 +59,7 @@ const EXAMPLE = {
 
 const EMPTY_RESULTS: Results = { brand: null, personas: null, strategy: null, creative: null, media: null, analytics: null, clv: null, roas: null };
 
-type OutputId = "brand_diagnosis" | "proposal_diagnosis" | "bizplan_diagnosis" | "event_diagnosis" | "storyboard" | "copywriting" | "content_proposal" | "brand_proposal";
+type OutputId = "brand_diagnosis" | "marketing_diagnosis" | "storyboard" | "naming_slogan" | "content_proposal" | "brand_proposal";
 
 const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; maxTokens: number; cta?: { label: string; url: string }; group: "diagnosis" | "creative" }[] = [
   {
@@ -73,33 +73,13 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     group: "diagnosis",
   },
   {
-    id: "proposal_diagnosis",
-    label: "제안서·RFP 심사 취약점 진단",
-    icon: FileText,
+    id: "marketing_diagnosis",
+    label: "마케팅 무료 진단",
+    icon: Target,
     system:
-      "너는 정부·대기업 제안서를 다수 심사해온 평가위원 출신 컨설턴트다. 주어진 브랜드/전략/크리에이티브 데이터를 하나의 사업 제안서라고 가정하고, 심사자 관점에서 이 제안이 가진 취약점을 정확히 4가지만 짚는다 (예: 논리 비약, 차별화 근거 부족, 정량 데이터 약함, 실행 계획 구체성 부족 등 실제 발견되는 것만). 각 항목은 문제 + 왜 심사자가 감점할지 + 어떤 보완이 필요한지를 합쳐 3문장 이내로 간결하게 작성한다. 억지로 문제를 만들지 말고, 데이터상 실제 약한 부분만 지적한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 채점이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
+      "너는 종합 마케팅 전략 컨설턴트다. 주어진 미디어 믹스(채널별 예산배분), ROAS, Analytics 데이터를 근거로 이 마케팅 전략의 강점 2가지와 리스크 3가지를 진단한다. 예산 배분이 실제로 타깃·목표에 맞게 짜여 있는지, 채널 조합에 놓치고 있는 사각지대는 없는지, 예상 성과(ROAS·전환)가 목표 대비 충분한지를 점검한다. 억지로 문제를 만들지 말고 데이터상 실제 근거가 있는 부분만 짚는다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
     maxTokens: 3000,
-    cta: { label: "논리 구조 재설계 컨설팅 (199,000원~)", url: "https://kmong.com/gig/807073" },
-    group: "diagnosis",
-  },
-  {
-    id: "bizplan_diagnosis",
-    label: "사업계획서 관점 점검 포인트",
-    icon: Briefcase,
-    system:
-      "너는 정부지원사업 평가위원 경험이 있는 사업계획서 컨설턴트다. 주어진 브랜드/전략/ROAS/CLV 데이터를 사업계획서의 '사업성·시장성·BM(수익모델)' 관점에서 점검한다. 잘 갖춰진 점 2가지와, 사업계획서로 옮겨 쓸 때 반드시 보강해야 할 점 3가지를 우선순위 순서로 제시한다. 각 항목은 2~3문장으로 간결하게, 장황한 설명은 생략한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 선정 가능성을 보장하는 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
-    maxTokens: 3000,
-    cta: { label: "사업계획서 점검·보강 컨설팅 (19,900원~)", url: "https://kmong.com/gig/806456" },
-    group: "diagnosis",
-  },
-  {
-    id: "event_diagnosis",
-    label: "행사·활성화 이벤트 리스크 점검",
-    icon: Briefcase,
-    system:
-      "너는 20개국 이상에서 오프라인 행사·팝업·활성화 이벤트를 총괄해온 글로벌 이벤트 기획 실무자다. 주어진 브랜드/타깃/크리에이티브 데이터를 바탕으로, 이 캠페인의 일환으로 오프라인 활성화 이벤트(팝업스토어, 런칭 이벤트, 체험 부스 등)를 연다고 가정하고 기획 리스크를 점검한다. 정확히 4가지 항목(컨셉이 타깃에게 통할지, 동선·경험 설계 리스크, 예산 대비 임팩트 우려, 성과 측정(KPI) 설계 여부)만 2~3문장으로 간결하게 짚는다. 억지로 문제를 만들지 말고 데이터상 실제 약한 부분만 지적한다. 전체 분량은 700단어를 넘기지 마라. 이것은 무료 예비진단이므로 확정적 판단이 아니라 점검 힌트 수준으로만 제시한다. 마크다운 헤더(##)를 사용하라.",
-    maxTokens: 3000,
-    cta: { label: "행사 컨셉·구조·KPI 설계 컨설팅 (199,000원~)", url: "https://kmong.com/gig/806963" },
+    cta: { label: "종합 마케팅 전략 컨설팅 문의", url: "https://kmong.com/@BrandAccelerator" },
     group: "diagnosis",
   },
   {
@@ -112,12 +92,13 @@ const OUTPUT_DEFS: { id: OutputId; label: string; icon: any; system: string; max
     group: "creative",
   },
   {
-    id: "copywriting",
-    label: "카피라이팅",
+    id: "naming_slogan",
+    label: "브랜드 네이밍 및 슬로건",
     icon: PenTool,
     system:
-      "너는 데이비드 오길비 수준의 글로벌 카피라이터다. 주어진 브랜드/전략/크리에이티브 정보를 바탕으로 정확히 4개 매체(디지털 배너, 소셜 피드, 옥외광고, 인쇄)에 대해서만 헤드라인 1개 + 바디카피 1문장 + CTA 한 문구를 작성한다. 매체당 이 3가지 요소 외에 부연 설명을 덧붙이지 않는다. 전체 분량은 반드시 800단어를 넘기지 마라. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
+      "너는 Interbrand·Landor 수준의 글로벌 브랜드 네이밍·슬로건 전문가다. 주어진 브랜드 DNA와 타깃을 바탕으로 (1) 캠페인/서브브랜드 네이밍 후보 3개와 각각의 근거(어원·발음·기억용이성), (2) 브랜드 슬로건 후보 3개(국문 1개 + 국문/영문 조합 2개)를 제시한다. 각 항목은 3문장 이내로 간결하게 작성하고, 부연 설명이나 서론은 생략한다. 전체 분량은 반드시 900단어를 넘기지 마라. 마크다운 헤더(##)와 목록을 사용해 작성하라.",
     maxTokens: 6000,
+    cta: { label: "브랜드 비전·미션 설계 컨설팅 (599,000원~)", url: "https://kmong.com/gig/806486" },
     group: "creative",
   },
   {
